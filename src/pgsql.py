@@ -3,8 +3,8 @@
 
 import os
 import logging
+import paths
 from external import External
-from tools import ensure_path
 
 _logger = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ class PgSql(External):
 
     @classmethod
     def dump(cls, db_name, dump_fullpath):
-        ensure_path(os.path.dirname(dump_fullpath))
+        paths.Paths.ensure(os.path.dirname(dump_fullpath))
         return cls.run(f'pg_dump -F p -b -f {dump_fullpath} {db_name}')
 
     @classmethod
