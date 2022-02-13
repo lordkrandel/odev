@@ -1,1 +1,4 @@
-typer==0.4.0
+invoke>=1.6.0
+prompt-toolkit>=3.0.26
+questionary>=1.10.0
+typer>=0.4.0
