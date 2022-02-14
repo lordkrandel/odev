@@ -3,10 +3,7 @@
 
 import invoke
 from external import External
-import logging
 import os
-
-_logger = logging.getLogger(__name__)
 
 
 class Git(External):

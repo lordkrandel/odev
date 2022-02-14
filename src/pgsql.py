@@ -2,18 +2,15 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import os
-import logging
-import paths
+from paths import ensure
 from external import External
-
-_logger = logging.getLogger(__name__)
 
 
 class PgSql(External):
 
     @classmethod
     def dump(cls, db_name, dump_fullpath):
-        paths.Paths.ensure(os.path.dirname(dump_fullpath))
+        ensure(os.path.dirname(dump_fullpath))
         return cls.run(f'pg_dump -F p -b -f {dump_fullpath} {db_name}')
 
     @classmethod

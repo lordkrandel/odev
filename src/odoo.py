@@ -3,10 +3,7 @@
 
 from external import External
 import os
-import logging
 import invoke
-
-_logger = logging.getLogger(__name__)
 
 
 class Odoo(External):
