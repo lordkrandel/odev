@@ -28,19 +28,25 @@ odev = Typer()
 
 @odev.command()
 def projects():
-    """ Display all the available project folders """
+    """
+        Display all the available project folders.
+    """
     for _name, project in get_projects().items():
         print(project.path)
 
 @odev.command()
 def project():
-    """ Display project data for the current folder """
+    """
+        Display project data for the current folder.
+    """
     project = get_project()
     print(f"{project.name}:: {project.to_json()}")
 
 @odev.command()
 def workspaces():
-    """ Display all the available workspaces for current project """
+    """
+        Display all the available workspaces for current project
+    """
     project = get_project()
     print(f"{project.name}::")
     for workspace_name in get_workspaces(project):
@@ -48,7 +54,9 @@ def workspaces():
 
 @odev.command()
 def workspace(workspace_name: Optional[str] = Argument(None, help=workspace_name_help), edit: bool = False):
-    """ Display currently selected workspace data """
+    """
+        Display currently selected workspace data
+    """
     project = get_project()
     workspace = get_workspace(project, workspace_name)
     if not edit:
@@ -62,7 +70,9 @@ def workspace(workspace_name: Optional[str] = Argument(None, help=workspace_name
 
 @odev.command()
 def start(workspace_name: Optional[str] = Argument(None, help=workspace_name_help), fast: bool = False):
-    """ Start Odoo and reinitialize the workspace's modules """
+    """
+        Start Odoo and reinitialize the workspace's modules.
+    """
     project = get_project()
     workspace = get_workspace(project, workspace_name)
     Odoo.start(project.relative('odoo'),
@@ -74,7 +84,9 @@ def start(workspace_name: Optional[str] = Argument(None, help=workspace_name_hel
 
 @odev.command()
 def start_tests(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags")):
-    """ Start Odoo with the tests-enable flag on """
+    """
+        Start Odoo with the tests-enable flag on.
+    """
     project = get_project()
     workspace = get_workspace(project)
     Odoo.start_tests(project.relative('odoo'),
@@ -85,7 +97,9 @@ def start_tests(tags: Optional[str] = Argument(None, help="Corresponding to --te
 
 @odev.command()
 def load(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
-    """ Load given workspace into the session """
+    """
+        Load given workspace into the session.
+    """
     project = get_project()
     if not workspace_name:
         workspace_name = select_workspace("load", project)
@@ -110,7 +124,9 @@ def load(workspace_name: Optional[str] = Argument(None, help=workspace_name_help
 
 @odev.command()
 def shell(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
-    """ Start Odoo as an interactive shell """
+    """
+        Starts Odoo as an interactive shell.
+    """
     project = get_project()
     workspace = get_workspace(project, workspace_name)
     Odoo.start(project.relative('odoo'),
@@ -153,7 +169,9 @@ def setup(db_name):
 # GIT ---------------------------------------------------
 @odev.command()
 def status(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_help), extended: bool = True):
-    """ Display status for all repos for current workspace """
+    """
+        Display status for all repos for current workspace.
+    """
     project = get_project()
     workspace = get_workspace(project)
     for name in workspace.repos:
@@ -168,6 +186,9 @@ def status(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_he
 
 @odev.command()
 def push(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_help), force: bool = False):
+    """
+        Git-pushes multiple repositories.
+    """
     project = get_project()
     workspace = get_workspace(project)
     for repo_name in select_repository(repo_names_csv, "push", workspace):
@@ -176,6 +197,9 @@ def push(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_help
 
 @odev.command()
 def fetch(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_help), origin: bool = False):
+    """
+        Git-fetches multiple repositories.
+    """
     project = get_project()
     workspace = get_workspace(project)
     for repo_name in select_repository(repo_names_csv, "fetch", workspace):
@@ -188,7 +212,9 @@ def fetch(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_hel
 
 @odev.command()
 def pull(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_help)):
-    """ Pulls selected repos for current workspace """
+    """
+        Git-pulls selected repos for current workspace.
+    """
     project = get_project()
     workspace = get_workspace(project)
     for repo_name in select_repository(repo_names_csv, "pull", workspace):
@@ -197,7 +223,9 @@ def pull(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_help
 
 @odev.command()
 def checkout(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_help)):
-    """ Check out multiple repositories """
+    """
+        Git-checkouts multiple repositories.
+    """
     project = get_project()
     workspace = get_workspace(project)
 
@@ -215,7 +243,9 @@ def checkout(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_
 
 @odev.command()
 def hook(workspace_name: Optional[str] = Argument(None, help=workspace_name_help), edit: bool = False):
-    """ Display or edit the post_hook python file for selected workspace """
+    """
+        Display or edit the post_hook python file for selected workspace.
+    """
     project = get_project()
     workspace = get_workspace(project, workspace_name)
     hook_fullpath = paths.workspace(workspace.name) / workspace.post_hook_script
@@ -227,7 +257,9 @@ def hook(workspace_name: Optional[str] = Argument(None, help=workspace_name_help
 
 @odev.command()
 def rc(workspace_name: Optional[str] = Argument(None, help=workspace_name_help), edit: bool = False):
-    """ View or edit the .odoorc configuration with default git editor """
+    """
+        View or edit the .odoorc configuration with default git editor
+    """
     project = get_project()
     workspace = get_workspace(project, workspace_name)
     rc_fullpath = paths.current() / workspace.rc_file
@@ -239,12 +271,16 @@ def rc(workspace_name: Optional[str] = Argument(None, help=workspace_name_help),
 
 @odev.command()
 def db_erase(db_name: Optional[str] = Argument(None, help="Database name")):
-    """ Drop and recreate the selected database """
+    """
+         Drop and recreate the selected database.
+    """
     return PgSql.erase(db_name)
 
 @odev.command()
 def db_dump(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
-    """ Dump the DB for the selected workspace """
+    """
+         Dump the DB for the selected workspace.
+    """
     project = get_project()
     workspace = get_workspace(project, workspace_name)
     dump_fullpath = paths.workspace(workspace.name) / workspace.db_dump_file
@@ -253,7 +289,9 @@ def db_dump(workspace_name: Optional[str] = Argument(None, help=workspace_name_h
 
 @odev.command()
 def db_restore(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
-    """ Restore the DB for the selected workspace """
+    """
+         Restore the DB for the selected workspace.
+    """
     project = get_project()
     workspace = get_workspace(project, workspace_name)
     dump_fullpath = paths.workspace(workspace.name) / workspace.db_dump_file
@@ -262,7 +300,9 @@ def db_restore(workspace_name: Optional[str] = Argument(None, help=workspace_nam
 
 @odev.command()
 def db_reinit(workspace_name: Optional[str] = Argument(None, help=workspace_name_help), dump: str = None, demo: bool = False):
-    """ Initialize the database with given modules and post_hook"""
+    """
+         Initialize the database with given modules and post_hook.
+    """
     project = get_project()
     workspace = get_workspace(project, workspace_name)
 
