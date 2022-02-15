@@ -2,7 +2,7 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import consts
-from hashlib import sha256
+from hashlib import md5
 from pathlib import Path
 
 
@@ -13,7 +13,7 @@ def current():
     return Path.cwd().absolute()
 
 def digest(path):
-    hasher = sha256()
+    hasher = md5()
     hasher.update(str(path).encode())
     return hasher.hexdigest()
 
