@@ -3,6 +3,7 @@
 
 from repo import Repo
 
+main_repos = ('odoo', 'enterprise')
 template_repos = {
     'odoo': Repo(
         'odoo',

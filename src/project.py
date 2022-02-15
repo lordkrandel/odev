@@ -2,9 +2,9 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import json
-import os
 from json_mixin import JsonMixin
-from paths import Paths
+import paths
+from pathlib import Path
 
 
 TEMPLATE = """{
@@ -55,13 +55,15 @@ class Project(JsonMixin):
                 'last_used': self.last_used}
         return json.dumps(data, indent=4)
 
+    def relative(self, path):
+        return Path(self.path) / path
+
 
 class Projects(JsonMixin, dict):
 
     def __init__(self, projects):
         super().__init__()
         self.update(projects)
-        self._selected = {}
 
     @classmethod
     def from_json(cls, data):
@@ -71,28 +73,34 @@ class Projects(JsonMixin, dict):
         data = {k: v.__dict__ for k, v in self.items()}
         return json.dumps(data, indent=4)
 
-    @property
-    def selected(self):
-        return self.get(self._selected, {})
+    @classmethod
+    def load(cls):
+        return Projects.load_json(paths.projects())
 
-    def select(self, project_name):
-        if project_name not in self:
-            raise ValueError("Current folder does not belong to a project.")
-        self._selected = project_name
+    def save(self):
+        return self.save_json(paths.projects())
 
+    @classmethod
+    def create_project(cls, path, digest):
+        """
+            Create a new project, path, and its 'master' workspace.
+        """
+        projects = Projects.load()
+        project = Project(digest, str(path), "master")
+        projects[digest] = project
+        projects.save_json(paths.projects())
 
-def create_project(digest):
-    paths = Paths(None)
-    projects = Projects.load_json(paths.projects)
-    projects[digest] = Project(digest, paths.current, "master")
-    projects.save_json(paths.projects)
-    project_dir = os.path.join(paths.config, "workspaces", digest)
-    if not os.path.isdir(project_dir):
-        os.mkdir(project_dir)
-    master_dir = os.path.join(project_dir, "master")
-    if not os.path.isdir(master_dir):
-        os.mkdir(master_dir)
-    master_file = os.path.join(master_dir, "master.json")
-    if not os.path.exists(master_file):
-        with open(master_file, "w", encoding="utf-8") as f:
-            f.write(TEMPLATE)
+        project_path = paths.config() / "workspaces" / digest
+        if not project_path.is_dir():
+            project_path.mkdir()
+        master_path = project_path / "master"
+
+        if not master_path.is_dir():
+            master_path.mkdir()
+
+        master_fullpath = master_path / "master.json"
+        if not master_fullpath.exists():
+            with open(master_fullpath, "w", encoding="utf-8") as f:
+                f.write(TEMPLATE)
+
+        return project
