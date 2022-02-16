@@ -9,21 +9,26 @@ import invoke
 class Odoo(External):
 
     @classmethod
-    def start(cls, odoo_bin_path, odoo_rc_fullpath, venv_path, modules, options='', mode='', pty=False, in_stream=None):
+    def get_demo_option(cls, demo):
+        return not demo and "--without-demo=WITHOUT_DEMO" or ""
+
+    @classmethod
+    def start(cls, odoo_bin_path, odoo_rc_fullpath, venv_path, modules, options='', mode='', pty=False, demo=False, in_stream=None):
         modules = ("-i %s" % ",".join(modules)) if modules else ''
         context = invoke.Context()
         with context.cd(odoo_bin_path):
             venv_script_path = os.path.join(venv_path, 'bin/activate')
-            command = f'source {venv_script_path} && ./odoo-bin {mode} -c {odoo_rc_fullpath} {modules} {options}'
+            command = f'source {venv_script_path} && ./odoo-bin {mode} {cls.get_demo_option(demo)} -c {odoo_rc_fullpath} {modules} {options}'
             print(command)
             context.run(command, pty=pty, in_stream=in_stream)
 
     @classmethod
-    def start_tests(cls, odoo_bin_path, odoo_rc_fullpath, venv_path, modules, tags=None):
+    def start_tests(cls, odoo_bin_path, odoo_rc_fullpath, venv_path, modules, tags=None, demo=True):
         tags = f"--test-tags={tags}" or ""
         cls.start(odoo_bin_path,
                   odoo_rc_fullpath,
                   venv_path,
                   modules,
-                  f'--test-enable --stop-after-init --without-demo=WITHOUT_DEMO {tags}',
-                  pty=True)
+                  f'--test-enable --stop-after-init {cls.get_demo_option(demo)} {tags}',
+                  pty=True,
+                  demo=demo)

@@ -69,7 +69,7 @@ def workspace(workspace_name: Optional[str] = Argument(None, help=workspace_name
 # OPERATIONS ---------------------------------
 
 @odev.command()
-def start(workspace_name: Optional[str] = Argument(None, help=workspace_name_help), fast: bool = False):
+def start(workspace_name: Optional[str] = Argument(None, help=workspace_name_help), fast: bool = False, demo: bool = False):
     """
         Start Odoo and reinitialize the workspace's modules.
     """
@@ -79,11 +79,11 @@ def start(workspace_name: Optional[str] = Argument(None, help=workspace_name_hel
                project.relative(workspace.rc_file),
                project.relative(workspace.venv_path),
                workspace.modules if not fast else [],
-               ' --without-demo=WITHOUT_DEMO',
-               pty=True)
+               pty=True,
+               demo=demo)
 
 @odev.command()
-def start_tests(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags")):
+def start_tests(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags"), demo: bool = False):
     """
         Start Odoo with the tests-enable flag on.
     """
@@ -93,7 +93,8 @@ def start_tests(tags: Optional[str] = Argument(None, help="Corresponding to --te
                      project.relative(workspace.rc_file),
                      project.relative(workspace.venv_path),
                      workspace.modules,
-                     tags)
+                     tags,
+                     demo=demo)
 
 @odev.command()
 def load(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
@@ -312,14 +313,14 @@ def db_reinit(workspace_name: Optional[str] = Argument(None, help=workspace_name
 
     # Running Odoo in the steps required to initialize the database
     print('Installing base module...')
-    options = f' --stop-after-init {(demo and " --without-demo=WITHOUT_DEMO ") or ""}'
+    options = ' --stop-after-init'
     rc_file_path = project.relative(workspace.rc_file)
     venv_path = project.relative(workspace.venv_path)
     odoo_path = project.relative('odoo')
-    Odoo.start(odoo_path, rc_file_path, venv_path, ['base'], options)
+    Odoo.start(odoo_path, rc_file_path, venv_path, ['base'], options, demo=demo)
 
     print('Installing modules %s ...', ','.join(workspace.modules))
-    Odoo.start(odoo_path, rc_file_path, venv_path, workspace.modules, options)
+    Odoo.start(odoo_path, rc_file_path, venv_path, workspace.modules, options, demo=demo)
 
     # Dump the db before the hook if the user has specifically asked for it
     if dump == 'before_hook':
@@ -327,7 +328,7 @@ def db_reinit(workspace_name: Optional[str] = Argument(None, help=workspace_name
 
     print('Executing post_init_hook...')
     hook_path = paths.workspace(workspace.name) / workspace.post_hook_script
-    Odoo.start(odoo_path, rc_file_path, venv_path, None, ' < ' + str(hook_path), 'shell')
+    Odoo.start(odoo_path, rc_file_path, venv_path, None, ' < ' + str(hook_path), 'shell', demo=demo)
 
     # Dump the db after the hook if the user has specifically asked for it
     if dump == 'after_hook':
