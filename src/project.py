@@ -81,6 +81,14 @@ class Projects(JsonMixin, dict):
         return self.save_json(paths.projects())
 
     @classmethod
+    def delete_project(cls, project_name):
+        projects = Projects.load()
+        if project_name not in projects:
+            raise ValueError(f"{project_name} is not a valid project")
+        projects.pop(project_name)
+        projects.save_json(paths.projects())
+
+    @classmethod
     def create_project(cls, path, digest):
         """
             Create a new project, path, and its 'master' workspace.

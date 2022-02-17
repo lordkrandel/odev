@@ -8,6 +8,7 @@ import os
 import sys
 import paths
 import questionary
+import shutil
 from templates import template_repos
 
 custom_style = questionary.Style.from_dict({
@@ -64,6 +65,15 @@ def select_repository(repo_names_csv, action, workspace, checked=None):
         choices = workspace.repos
     return checkbox("repository", action, choices)
 
+def select_project(action, project_name=None):
+    projects = get_projects()
+    if not project_name:
+        choices = [questionary.Choice(project.path, value=project.name) for project in projects.values()]
+        project_name = select("project", action, choices, select_function=questionary.select)
+        if not project_name:
+            return []
+    return projects.get(project_name, [])
+
 def select_branch(repo_name, choices):
     return questionary.autocomplete(
         f"[{repo_name}] Which branch do you want to checkout (<remote>/<branch>)?",
@@ -85,3 +95,14 @@ def select(subject, action, choices, select_function=questionary.rawselect):
                            choices=choices,
                            style=custom_style,
                            qmark=consts.QMARK).ask() or []
+
+def confirm(action):
+    return questionary.confirm(f"Are you sure you want to {action}?",
+                               style=custom_style,
+                               qmark=consts.QMARK).ask()
+
+def delete_project(project_name):
+    Projects.delete_project(project_name)
+
+def delete_workspace(workspace_name):
+    shutil.rmtree(paths.workspace(workspace_name))

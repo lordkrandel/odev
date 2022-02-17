@@ -6,21 +6,19 @@ from pathlib import Path
 from typing import Optional
 
 import paths
+import tools
 from external import External
 from git import Git
 from pgsql import PgSql
 from env import Environment
 from templates import template_repos, main_repos
-from tools import (cat, get_project, get_projects, get_workspace,
-                   get_workspaces, select_branch, select_repository,
-                   select_workspace, set_last_used)
 from typer import Argument, Typer
 
 from odoo import Odoo
 
 workspace_name_help = "Name of the workspace that holds the database information, omit to use current"
 repo_names_csv_help = "CSV list of repositories"
-
+project_name_help = "Name of the project (md5 of the path)"
 
 odev = Typer()
 
@@ -31,15 +29,15 @@ def projects():
     """
         Display all the available project folders.
     """
-    for _name, project in get_projects().items():
-        print(project.path)
+    for _name, project in tools.get_projects().items():
+        print(f"{project.path}  {project.name}  {paths.config() / project.name}")
 
 @odev.command()
 def project():
     """
         Display project data for the current folder.
     """
-    project = get_project()
+    project = tools.get_project()
     print(f"{project.name}:: {project.to_json()}")
 
 @odev.command()
@@ -47,9 +45,9 @@ def workspaces():
     """
         Display all the available workspaces for current project
     """
-    project = get_project()
+    project = tools.get_project()
     print(f"{project.name}::")
-    for workspace_name in get_workspaces(project):
+    for workspace_name in tools.get_workspaces(project):
         print(f"    {workspace_name}")
 
 @odev.command()
@@ -57,14 +55,38 @@ def workspace(workspace_name: Optional[str] = Argument(None, help=workspace_name
     """
         Display currently selected workspace data
     """
-    project = get_project()
-    workspace = get_workspace(project, workspace_name)
+    project = tools.get_project()
+    workspace = tools.get_workspace(project, workspace_name)
     if not edit:
         print(f"{workspace.name}:: {workspace.to_json()}")
         return
     editor = Git.get_editor()
     workspace_file = paths.workspace_file(workspace.name)
     External.edit(editor, workspace_file)
+
+@odev.command()
+def delete_project(project_name: Optional[str] = Argument(None, help=project_name_help)):
+    """
+        Delete a project.
+    """
+    project = tools.select_project("delete", project_name)
+    if not project or not tools.confirm("delete it"):
+        return
+    tools.delete_project(project.name)
+
+@odev.command()
+def delete_workspace(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
+    """
+        Delete a workspace.
+    """
+    project = tools.get_project()
+    if not workspace_name:
+        workspace_name = tools.select_workspace("delete", project)
+        if not workspace_name:
+            return
+    if not tools.confirm("delete it"):
+        return
+    tools.delete_workspace(workspace_name)
 
 # OPERATIONS ---------------------------------
 
@@ -73,8 +95,8 @@ def start(workspace_name: Optional[str] = Argument(None, help=workspace_name_hel
     """
         Start Odoo and reinitialize the workspace's modules.
     """
-    project = get_project()
-    workspace = get_workspace(project, workspace_name)
+    project = tools.get_project()
+    workspace = tools.get_workspace(project, workspace_name)
     Odoo.start(project.relative('odoo'),
                project.relative(workspace.rc_file),
                project.relative(workspace.venv_path),
@@ -87,8 +109,8 @@ def start_tests(tags: Optional[str] = Argument(None, help="Corresponding to --te
     """
         Start Odoo with the tests-enable flag on.
     """
-    project = get_project()
-    workspace = get_workspace(project)
+    project = tools.get_project()
+    workspace = tools.get_workspace(project)
     Odoo.start_tests(project.relative('odoo'),
                      project.relative(workspace.rc_file),
                      project.relative(workspace.venv_path),
@@ -101,12 +123,12 @@ def load(workspace_name: Optional[str] = Argument(None, help=workspace_name_help
     """
         Load given workspace into the session.
     """
-    project = get_project()
+    project = tools.get_project()
     if not workspace_name:
-        workspace_name = select_workspace("load", project)
+        workspace_name = tools.select_workspace("load", project)
         if not workspace_name:
             return
-    workspace = get_workspace(project, workspace_name)
+    workspace = tools.get_workspace(project, workspace_name)
 
     # Check the status
     if not status(extended=False):
@@ -121,15 +143,15 @@ def load(workspace_name: Optional[str] = Argument(None, help=workspace_name_help
         Git.checkout(project.relative(repo.name), repo.branch)
 
     # Set the current workspace
-    set_last_used(project.name, workspace.name)
+    tools.set_last_used(project.name, workspace.name)
 
 @odev.command()
 def shell(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
     """
         Starts Odoo as an interactive shell.
     """
-    project = get_project()
-    workspace = get_workspace(project, workspace_name)
+    project = tools.get_project()
+    workspace = tools.get_workspace(project, workspace_name)
     Odoo.start(project.relative('odoo'),
                project.relative(workspace.rc_file),
                project.relative(workspace.venv_path),
@@ -140,8 +162,8 @@ def setup(db_name):
     """
         Sets up the main folder, which will contain all repositories and the virtual environment.
     """
-    project = get_project()
-    workspace = get_workspace(project)
+    project = tools.get_project()
+    workspace = tools.get_workspace(project)
 
     # Create virtualenv
     venv_path = project.relative('.venv')
@@ -150,7 +172,7 @@ def setup(db_name):
     env.create()
 
     # Clone the base repos and set the 'dev' remote
-    for repo_name in select_repository('', "setup", workspace, checked=main_repos):
+    for repo_name in tools.select_repository('', "setup", workspace, checked=main_repos):
         repo = template_repos[repo_name]
         repo_path = project.relative(repo_name)
 
@@ -173,8 +195,8 @@ def status(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_he
     """
         Display status for all repos for current workspace.
     """
-    project = get_project()
-    workspace = get_workspace(project)
+    project = tools.get_project()
+    workspace = tools.get_workspace(project)
     for name in workspace.repos:
         repo_path = Path(project.path) / name
         if not repo_path.is_dir():
@@ -190,9 +212,9 @@ def push(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_help
     """
         Git-pushes multiple repositories.
     """
-    project = get_project()
-    workspace = get_workspace(project)
-    for repo_name in select_repository(repo_names_csv, "push", workspace):
+    project = tools.get_project()
+    workspace = tools.get_workspace(project)
+    for repo_name in tools.select_repository(repo_names_csv, "push", workspace):
         print(f"Pushing {repo_name}...")
         Git.push(project.relative(repo_name), force=force)
 
@@ -201,9 +223,9 @@ def fetch(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_hel
     """
         Git-fetches multiple repositories.
     """
-    project = get_project()
-    workspace = get_workspace(project)
-    for repo_name in select_repository(repo_names_csv, "fetch", workspace):
+    project = tools.get_project()
+    workspace = tools.get_workspace(project)
+    for repo_name in tools.select_repository(repo_names_csv, "fetch", workspace):
         print(f"Fetching {repo_name}...")
         if origin:
             Git.fetch(project.path, repo_name, "origin", "")
@@ -216,9 +238,9 @@ def pull(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_help
     """
         Git-pulls selected repos for current workspace.
     """
-    project = get_project()
-    workspace = get_workspace(project)
-    for repo_name in select_repository(repo_names_csv, "pull", workspace):
+    project = tools.get_project()
+    workspace = tools.get_workspace(project)
+    for repo_name in tools.select_repository(repo_names_csv, "pull", workspace):
         print(f"Pulling {repo_name}...")
         Git.pull(project.relative(repo_name))
 
@@ -227,13 +249,13 @@ def checkout(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_
     """
         Git-checkouts multiple repositories.
     """
-    project = get_project()
-    workspace = get_workspace(project)
+    project = tools.get_project()
+    workspace = tools.get_workspace(project)
 
-    for repo_name in select_repository(repo_names_csv, "checkout", workspace, checked=main_repos):
+    for repo_name in tools.select_repository(repo_names_csv, "checkout", workspace, checked=main_repos):
         # all the available branch names
         branch_choices = Git.get_remote_branches(project.relative(repo_name))
-        answer = select_branch(repo_name, branch_choices)
+        answer = tools.select_branch(repo_name, branch_choices)
         remote_name, branch_name = answer.split('/')
         print(f"Fetching {repo_name} {remote_name}/{branch_name}...")
         Git.fetch(project.path, repo_name, remote_name, branch_name)
@@ -247,13 +269,13 @@ def hook(workspace_name: Optional[str] = Argument(None, help=workspace_name_help
     """
         Display or edit the post_hook python file for selected workspace.
     """
-    project = get_project()
-    workspace = get_workspace(project, workspace_name)
+    project = tools.get_project()
+    workspace = tools.get_workspace(project, workspace_name)
     hook_fullpath = paths.workspace(workspace.name) / workspace.post_hook_script
     if edit:
         External.edit(Git.get_editor(), hook_fullpath)
         return
-    cat(hook_fullpath)
+    tools.cat(hook_fullpath)
 
 
 @odev.command()
@@ -261,12 +283,12 @@ def rc(workspace_name: Optional[str] = Argument(None, help=workspace_name_help),
     """
         View or edit the .odoorc configuration with default git editor
     """
-    project = get_project()
-    workspace = get_workspace(project, workspace_name)
+    project = tools.get_project()
+    workspace = tools.get_workspace(project, workspace_name)
     rc_fullpath = paths.current() / workspace.rc_file
     if edit:
         return External.edit(Git.get_editor(), rc_fullpath)
-    cat(rc_fullpath)
+    tools.cat(rc_fullpath)
 
 # DB ------------------------------------------------------------
 
@@ -282,8 +304,8 @@ def db_dump(workspace_name: Optional[str] = Argument(None, help=workspace_name_h
     """
          Dump the DB for the selected workspace.
     """
-    project = get_project()
-    workspace = get_workspace(project, workspace_name)
+    project = tools.get_project()
+    workspace = tools.get_workspace(project, workspace_name)
     dump_fullpath = paths.workspace(workspace.name) / workspace.db_dump_file
     print(f"Dumping {workspace.db_name} -> {dump_fullpath}")
     PgSql.dump(workspace.db_name, dump_fullpath)
@@ -293,8 +315,8 @@ def db_restore(workspace_name: Optional[str] = Argument(None, help=workspace_nam
     """
          Restore the DB for the selected workspace.
     """
-    project = get_project()
-    workspace = get_workspace(project, workspace_name)
+    project = tools.get_project()
+    workspace = tools.get_workspace(project, workspace_name)
     dump_fullpath = paths.workspace(workspace.name) / workspace.db_dump_file
     print("Restoring {workspace.db_name} <- {dump_fullpath}")
     PgSql.restore(workspace.db_name, dump_fullpath)
@@ -304,8 +326,8 @@ def db_reinit(workspace_name: Optional[str] = Argument(None, help=workspace_name
     """
          Initialize the database with given modules and post_hook.
     """
-    project = get_project()
-    workspace = get_workspace(project, workspace_name)
+    project = tools.get_project()
+    workspace = tools.get_workspace(project, workspace_name)
 
     # Erase the database
     print(f'Erasing {workspace.db_name}...')
