@@ -322,7 +322,11 @@ def db_restore(workspace_name: Optional[str] = Argument(None, help=workspace_nam
     PgSql.restore(workspace.db_name, dump_fullpath)
 
 @odev.command()
-def db_reinit(workspace_name: Optional[str] = Argument(None, help=workspace_name_help), dump: str = None, demo: bool = False):
+def db_reinit(workspace_name: Optional[str] = Argument(None, help=workspace_name_help),
+              dump_before: bool = False,
+              dump_after: bool = False,
+              demo: bool = False,
+              stop: bool = False):
     """
          Initialize the database with given modules and post_hook.
     """
@@ -345,7 +349,7 @@ def db_reinit(workspace_name: Optional[str] = Argument(None, help=workspace_name
     Odoo.start(odoo_path, rc_file_path, venv_path, workspace.modules, options, demo=demo)
 
     # Dump the db before the hook if the user has specifically asked for it
-    if dump == 'before_hook':
+    if dump_before:
         db_dump(workspace_name)
 
     print('Executing post_init_hook...')
@@ -353,8 +357,9 @@ def db_reinit(workspace_name: Optional[str] = Argument(None, help=workspace_name
     Odoo.start(odoo_path, rc_file_path, venv_path, None, ' < ' + str(hook_path), 'shell', demo=demo)
 
     # Dump the db after the hook if the user has specifically asked for it
-    if dump == 'after_hook':
+    if dump_after:
         db_dump(workspace_name)
 
-    print('Starting Odoo...')
-    Odoo.start(odoo_path, rc_file_path, venv_path, None)
+    if not stop:
+        print('Starting Odoo...')
+        Odoo.start(odoo_path, rc_file_path, venv_path, None)
