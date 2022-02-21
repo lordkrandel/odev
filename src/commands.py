@@ -27,10 +27,14 @@ odev = Typer()
 # FILES --------------------------------------------------
 
 @odev.command()
-def projects():
+def projects(edit: bool = False):
     """
         Display all the available project folders.
     """
+    if edit:
+        editor = Git.get_editor()
+        External.edit(editor, paths.projects())
+        return
     for _name, project in tools.get_projects().items():
         print(f"{project.path}  {project.name}  {paths.config() / 'workspaces' / project.name}")
 
@@ -86,7 +90,7 @@ def delete_workspace(workspace_name: Optional[str] = Argument(None, help=workspa
         workspace_name = tools.select_workspace("delete", project)
         if not workspace_name:
             return
-    if not tools.confirm("delete it"):
+    if not tools.confirm(f"delete {paths.workspace(workspace_name)}"):
         return
     tools.delete_workspace(workspace_name)
 
@@ -105,10 +109,23 @@ def create(
         - Branches to be checked out
         - VirtualEnvironment to be used (default ".venv")
     """
+
     project = tools.get_project()
-    if workspace_name in tools.get_workspaces(project) + ['last_used']:
-        print(f"Workspace {workspace_name} already exists")
+    if not workspace_name:
+        workspace_name = tools.input_text("What name for your workspace?").strip()
+    if not workspace_name or workspace_name in tools.get_workspaces(project) + ['last_used']:
+        print(f"Workspace {workspace_name} is empty or already exists")
         return
+    if not db_name:
+        db_name = tools.input_text("What database name to use?").strip()
+        if not db_name:
+            print("Empty db_name, closing...")
+            return
+    if not modules_csv:
+        modules_csv = tools.input_text("What modules to use? (CSV)").strip()
+        if not modules_csv:
+            print("Empty list of modules, closing...")
+            return
     tools.create_workspace(workspace_name, db_name, modules_csv)
     checkout(workspace_name)
 
@@ -209,6 +226,8 @@ def status(extended: bool = True):
     """
     project = tools.get_project()
     workspace = tools.get_workspace(project)
+    if not workspace:
+        return True
     for name in workspace.repos:
         repo_path = Path(project.path) / name
         if not repo_path.is_dir():
@@ -261,10 +280,12 @@ def checkout(workspace_name: Optional[str] = Argument(None, help=workspace_name_
         Git-checkouts multiple repositories.
     """
     project = tools.get_project()
+    repos = None
     if workspace_name:
-        repos = tools.get_workspace(project, workspace_name).repos
-    else:
-        repos = tools.ask_repos_and_branches(project, "checkout")
+        workspace = tools.get_workspace(project, workspace_name)
+        if workspace:
+            repos = workspace.repos
+    repos = repos or tools.ask_repos_and_branches(project, "checkout")
 
     for repo_name, repo in repos.items():
         print(f"Fetching {repo_name} {repo.remote}/{repo.branch}...")

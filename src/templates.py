@@ -48,3 +48,9 @@ template_repos = {
         'master'
     )
 }
+
+post_hook_template = """#!/usr/bin/env python3
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
+
+self = locals().get('self', object())
+"""

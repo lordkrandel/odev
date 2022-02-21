@@ -4,7 +4,7 @@
 from project import Projects
 from workspace import Workspace
 from git import Git
-from templates import template_repos, main_repos
+from templates import template_repos, main_repos, post_hook_template
 from repo import Repo
 import consts
 import os
@@ -23,6 +23,9 @@ def cat(fullpath, encoding="UTF-8"):
         lines = f.readlines()
     for line in lines:
         print(line.rstrip())
+
+def input_text(text):
+    return questionary.text(text, style=custom_style, qmark=consts.QMARK).ask()
 
 def get_projects():
     return Projects.load_json(paths.projects())
@@ -95,7 +98,11 @@ def create_workspace(workspace_name, db_name, modules_csv):
         "post_hook.py",
         '.venv',
         '.odoorc')
-    workspace.save_json(paths.workspace(workspace_name))
+    workspace_path = paths.workspace(workspace_name)
+    paths.ensure(workspace_path)
+    workspace.save_json(paths.workspace_file(workspace_name))
+    with open(workspace_path / "post_hook.py", "w", encoding="utf-8") as post_hook_file:
+        post_hook_file.write(post_hook_template)
     return repos
 
 def set_last_used(project_name, workspace_name):
