@@ -11,14 +11,16 @@ from external import External
 from git import Git
 from pgsql import PgSql
 from env import Environment
-from templates import template_repos, main_repos
+from templates import main_repos
 from typer import Argument, Typer
 
 from odoo import Odoo
 
 workspace_name_help = "Name of the workspace that holds the database information, omit to use current"
-repo_names_csv_help = "CSV list of repositories"
+db_name_help = "Name of the database"
 project_name_help = "Name of the project (md5 of the path)"
+modules_csv_help = "CSV list of modules"
+venv_path_help = "Virtualenv path"
 
 odev = Typer()
 
@@ -30,7 +32,7 @@ def projects():
         Display all the available project folders.
     """
     for _name, project in tools.get_projects().items():
-        print(f"{project.path}  {project.name}  {paths.config() / project.name}")
+        print(f"{project.path}  {project.name}  {paths.config() / 'workspaces' / project.name}")
 
 @odev.command()
 def project():
@@ -88,6 +90,29 @@ def delete_workspace(workspace_name: Optional[str] = Argument(None, help=workspa
         return
     tools.delete_workspace(workspace_name)
 
+@odev.command()
+def create(
+    workspace_name: str = Argument(None, help=workspace_name_help),
+    db_name: str = Argument(None, help=db_name_help),
+    modules_csv: str = Argument(None, help=modules_csv_help),
+    venv_path: Optional[str] = Argument(None, help=venv_path_help)):
+    """
+        Create a new workspace from a series of selections:
+        - Name to be given (check if used)
+        - Database to be used
+        - Modules to be installed
+        - Repositories to be added (default main_repos)
+        - Branches to be checked out
+        - VirtualEnvironment to be used (default ".venv")
+    """
+    project = tools.get_project()
+    if workspace_name in tools.get_workspaces(project) + ['last_used']:
+        print(f"Workspace {workspace_name} already exists")
+        return
+    tools.create_workspace(workspace_name, db_name, modules_csv)
+    checkout(workspace_name)
+
+
 # OPERATIONS ---------------------------------
 
 @odev.command()
@@ -128,22 +153,10 @@ def load(workspace_name: Optional[str] = Argument(None, help=workspace_name_help
         workspace_name = tools.select_workspace("load", project)
         if not workspace_name:
             return
-    workspace = tools.get_workspace(project, workspace_name)
-
-    # Check the status
     if not status(extended=False):
         print("Cannot load, changes present.")
         return
-
-    # Fetch and checkout each repo
-    for _name, repo in workspace.repos.items():
-        print(f"Fetching {repo.name}...")
-        Git.fetch(project.path, repo.name, repo.remote, repo.branch)
-        print(f"Checking out {repo.name}...")
-        Git.checkout(project.relative(repo.name), repo.branch)
-
-    # Set the current workspace
-    tools.set_last_used(project.name, workspace.name)
+    checkout(workspace_name)
 
 @odev.command()
 def shell(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
@@ -172,8 +185,7 @@ def setup(db_name):
     env.create()
 
     # Clone the base repos and set the 'dev' remote
-    for repo_name in tools.select_repository('', "setup", workspace, checked=main_repos):
-        repo = template_repos[repo_name]
+    for repo_name, repo in tools.select_repositories("setup", workspace, checked=main_repos).items():
         repo_path = project.relative(repo_name)
 
         print(f"cloning {repo_name}...")
@@ -191,7 +203,7 @@ def setup(db_name):
 
 # GIT ---------------------------------------------------
 @odev.command()
-def status(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_help), extended: bool = True):
+def status(extended: bool = True):
     """
         Display status for all repos for current workspace.
     """
@@ -208,59 +220,62 @@ def status(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_he
     return True
 
 @odev.command()
-def push(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_help), force: bool = False):
+def push(force: bool = False):
     """
         Git-pushes multiple repositories.
     """
     project = tools.get_project()
     workspace = tools.get_workspace(project)
-    for repo_name in tools.select_repository(repo_names_csv, "push", workspace):
+    for repo_name in tools.select_repositories("push", workspace):
         print(f"Pushing {repo_name}...")
         Git.push(project.relative(repo_name), force=force)
 
 @odev.command()
-def fetch(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_help), origin: bool = False):
+def fetch(origin: bool = False):
     """
         Git-fetches multiple repositories.
     """
     project = tools.get_project()
     workspace = tools.get_workspace(project)
-    for repo_name in tools.select_repository(repo_names_csv, "fetch", workspace):
+    for repo_name, repo in tools.select_repositories("fetch", workspace.items()):
         print(f"Fetching {repo_name}...")
         if origin:
             Git.fetch(project.path, repo_name, "origin", "")
         else:
-            repo = workspace.repos[repo_name]
             Git.fetch(project.path, repo_name, repo.remote, repo.branch)
 
 @odev.command()
-def pull(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_help)):
+def pull():
     """
         Git-pulls selected repos for current workspace.
     """
     project = tools.get_project()
     workspace = tools.get_workspace(project)
-    for repo_name in tools.select_repository(repo_names_csv, "pull", workspace):
+    for repo_name in tools.select_repositories("pull", workspace):
         print(f"Pulling {repo_name}...")
         Git.pull(project.relative(repo_name))
 
 @odev.command()
-def checkout(repo_names_csv: Optional[str] = Argument(None, help=repo_names_csv_help)):
+def checkout(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
     """
         Git-checkouts multiple repositories.
     """
     project = tools.get_project()
-    workspace = tools.get_workspace(project)
+    if workspace_name:
+        repos = tools.get_workspace(project, workspace_name).repos
+    else:
+        repos = tools.ask_repos_and_branches(project, "checkout")
 
-    for repo_name in tools.select_repository(repo_names_csv, "checkout", workspace, checked=main_repos):
-        # all the available branch names
-        branch_choices = Git.get_remote_branches(project.relative(repo_name))
-        answer = tools.select_branch(repo_name, branch_choices)
-        remote_name, branch_name = answer.split('/')
-        print(f"Fetching {repo_name} {remote_name}/{branch_name}...")
-        Git.fetch(project.path, repo_name, remote_name, branch_name)
-        print(f"Checking out {repo_name} {remote_name}/{branch_name}...")
-        Git.checkout(project.relative(repo_name), branch_name)
+    for repo_name, repo in repos.items():
+        print(f"Fetching {repo_name} {repo.remote}/{repo.branch}...")
+        Git.fetch(project.path, repo_name, repo.remote, repo.branch)
+        print(f"Checking out {repo_name} {repo.remote}/{repo.branch}...")
+        Git.checkout(project.relative(repo_name), repo.branch)
+
+    tools.set_last_used(project.name, workspace_name)
+
+    return repos
+
 
 # FILES ------------------------------------------------------------
 

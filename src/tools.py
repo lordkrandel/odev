@@ -3,13 +3,15 @@
 
 from project import Projects
 from workspace import Workspace
+from git import Git
+from templates import template_repos, main_repos
+from repo import Repo
 import consts
 import os
 import sys
 import paths
 import questionary
 import shutil
-from templates import template_repos
 
 custom_style = questionary.Style.from_dict({
     "completion-menu": "bg:#222222",
@@ -56,14 +58,14 @@ def select_workspace(action, project):
     workspaces = get_workspaces(project) + ['last_used']
     return select("workspace", action, workspaces, questionary.autocomplete)
 
-def select_repository(repo_names_csv, action, workspace, checked=None):
-    if repo_names_csv:
-        return repo_names_csv.split(',')
+def select_repositories(action, workspace=None, checked=None):
     if checked:
         choices = [questionary.Choice(x, checked=(x in checked)) for x in template_repos]
-    else:
+    elif workspace:
         choices = workspace.repos
-    return checkbox("repository", action, choices)
+    else:
+        choices = template_repos.keys()
+    return {repo_name : template_repos[repo_name] for repo_name in checkbox("repository", action, choices)}
 
 def select_project(action, project_name=None):
     projects = get_projects()
@@ -74,13 +76,27 @@ def select_project(action, project_name=None):
             return []
     return projects.get(project_name, [])
 
-def select_branch(repo_name, choices):
+def select_branch(repo_name, choices, action):
     return questionary.autocomplete(
-        f"[{repo_name}] Which branch do you want to checkout (<remote>/<branch>)?",
+        f"[{repo_name}] Which branch do you want to {action} (<remote>/<branch>)?",
         choices=choices,
         style=custom_style,
         qmark=consts.QMARK
     ).ask() or []
+
+def create_workspace(workspace_name, db_name, modules_csv):
+    repos = select_repositories("checkout", workspace=None, checked=main_repos)
+    workspace = Workspace(
+        workspace_name,
+        db_name,
+        repos,
+        modules_csv.split(','),
+        f"{workspace_name}.dmp",
+        "post_hook.py",
+        '.venv',
+        '.odoorc')
+    workspace.save_json(paths.workspace(workspace_name))
+    return repos
 
 def set_last_used(project_name, workspace_name):
     projects = Projects.load()
@@ -106,3 +122,14 @@ def delete_project(project_name):
 
 def delete_workspace(workspace_name):
     shutil.rmtree(paths.workspace(workspace_name))
+
+def ask_repos_and_branches(project, action, workspace=None):
+    repos = {}
+    for repo_name, repo in select_repositories(action, workspace, checked=main_repos).items():
+        # all the available branch names
+        branch_choices = Git.get_remote_branches(project.relative(repo_name))
+        answer = select_branch(repo_name, branch_choices, action)
+        remote_name, branch_name = answer.split('/')
+        repos[repo_name] = Repo(repo.name, repo.dev, repo.origin, remote_name, branch_name)
+
+    return repos
