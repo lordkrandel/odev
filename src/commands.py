@@ -49,7 +49,7 @@ def project():
 @odev.command()
 def workspaces():
     """
-        Display all the available workspaces for current project
+        Display all the available workspaces for current project.
     """
     project = tools.get_project()
     print(f"{project.name}::")
@@ -59,7 +59,7 @@ def workspaces():
 @odev.command()
 def workspace(workspace_name: Optional[str] = Argument(None, help=workspace_name_help), edit: bool = False):
     """
-        Display currently selected workspace data
+        Display currently selected workspace data.
     """
     project = tools.get_project()
     workspace = tools.get_workspace(project, workspace_name)
@@ -101,13 +101,7 @@ def create(
     modules_csv: str = Argument(None, help=modules_csv_help),
     venv_path: Optional[str] = Argument(None, help=venv_path_help)):
     """
-        Create a new workspace from a series of selections:
-        - Name to be given (check if used)
-        - Database to be used
-        - Modules to be installed
-        - Repositories to be added (default main_repos)
-        - Branches to be checked out
-        - VirtualEnvironment to be used (default ".venv")
+        Create a new workspace from a series of selections.
     """
 
     project = tools.get_project()
@@ -147,9 +141,10 @@ def start(workspace_name: Optional[str] = Argument(None, help=workspace_name_hel
                demo=demo)
 
 @odev.command()
-def start_tests(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags"), demo: bool = False):
+def start_tests(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags")):
     """
         Start Odoo with the tests-enable flag on.
+        This will install the demo data.
     """
     project = tools.get_project()
     workspace = tools.get_workspace(project)
@@ -157,8 +152,7 @@ def start_tests(tags: Optional[str] = Argument(None, help="Corresponding to --te
                      project.relative(workspace.rc_file),
                      project.relative(workspace.venv_path),
                      workspace.modules,
-                     tags,
-                     demo=demo)
+                     tags)
 
 @odev.command()
 def load(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
@@ -190,7 +184,7 @@ def shell(workspace_name: Optional[str] = Argument(None, help=workspace_name_hel
 @odev.command()
 def setup(db_name):
     """
-        Sets up the main folder, which will contain all repositories and the virtual environment.
+        Sets up the main folder, with repos and venv.
     """
     project = tools.get_project()
     workspace = tools.get_workspace(project)
@@ -303,7 +297,7 @@ def checkout(workspace_name: Optional[str] = Argument(None, help=workspace_name_
 @odev.command()
 def hook(workspace_name: Optional[str] = Argument(None, help=workspace_name_help), edit: bool = False):
     """
-        Display or edit the post_hook python file for selected workspace.
+        Display or edit the post_hook python file.
     """
     project = tools.get_project()
     workspace = tools.get_workspace(project, workspace_name)
@@ -317,7 +311,7 @@ def hook(workspace_name: Optional[str] = Argument(None, help=workspace_name_help
 @odev.command()
 def rc(workspace_name: Optional[str] = Argument(None, help=workspace_name_help), edit: bool = False):
     """
-        View or edit the .odoorc configuration with default git editor
+        View or edit the .odoorc config with default editor.
     """
     project = tools.get_project()
     workspace = tools.get_workspace(project, workspace_name)
@@ -329,9 +323,9 @@ def rc(workspace_name: Optional[str] = Argument(None, help=workspace_name_help),
 # DB ------------------------------------------------------------
 
 @odev.command()
-def db_erase(db_name: Optional[str] = Argument(None, help="Database name")):
+def db_clear(db_name: Optional[str] = Argument(None, help="Database name")):
     """
-         Drop and recreate the selected database.
+         Clear database by dropping and recreating it.
     """
     return PgSql.erase(db_name)
 
@@ -358,20 +352,20 @@ def db_restore(workspace_name: Optional[str] = Argument(None, help=workspace_nam
     PgSql.restore(workspace.db_name, dump_fullpath)
 
 @odev.command()
-def db_reinit(workspace_name: Optional[str] = Argument(None, help=workspace_name_help),
+def db_init(workspace_name: Optional[str] = Argument(None, help=workspace_name_help),
               dump_before: bool = False,
               dump_after: bool = False,
               demo: bool = False,
               stop: bool = False):
     """
-         Initialize the database with given modules and post_hook.
+         Initialize the database, with modules and hook.
     """
     project = tools.get_project()
     workspace = tools.get_workspace(project, workspace_name)
 
     # Erase the database
     print(f'Erasing {workspace.db_name}...')
-    db_erase(workspace.db_name)
+    db_clear(workspace.db_name)
 
     # Running Odoo in the steps required to initialize the database
     print('Installing base module...')

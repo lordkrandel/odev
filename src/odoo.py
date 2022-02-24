@@ -23,12 +23,12 @@ class Odoo(External):
             context.run(command, pty=pty, in_stream=in_stream)
 
     @classmethod
-    def start_tests(cls, odoo_bin_path, odoo_rc_fullpath, venv_path, modules, tags=None, demo=True):
+    def start_tests(cls, odoo_bin_path, odoo_rc_fullpath, venv_path, modules, tags=None):
         tags = f"--test-tags={tags}" or ""
         cls.start(odoo_bin_path,
                   odoo_rc_fullpath,
                   venv_path,
                   modules,
-                  f'--test-enable --stop-after-init {cls.get_demo_option(demo)} {tags}',
+                  f'--test-enable --stop-after-init {tags}',
                   pty=True,
-                  demo=demo)
+                  demo=True)

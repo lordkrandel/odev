@@ -14,7 +14,7 @@ class JsonMixin():
         with open(fullpath, "r", encoding="utf-8") as f:
             content = f.read() or "{}"
         data = json.loads(content)
-        return cls.from_json(data)
+        return cls.from_json(data) or {}
 
     @classmethod
     def from_json(cls, data):
