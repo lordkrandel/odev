@@ -87,8 +87,8 @@ def select_branch(repo_name, choices, action):
         qmark=consts.QMARK
     ).ask() or []
 
-def create_workspace(workspace_name, db_name, modules_csv):
-    repos = select_repositories("checkout", workspace=None, checked=main_repos)
+def create_workspace(workspace_name, db_name, modules_csv, repos=None):
+    repos = repos or select_repositories("checkout", workspace=None, checked=main_repos)
     workspace = Workspace(
         workspace_name,
         db_name,

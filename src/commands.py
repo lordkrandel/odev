@@ -106,22 +106,22 @@ def create(
 
     project = tools.get_project()
     if not workspace_name:
-        workspace_name = tools.input_text("What name for your workspace?").strip()
-    if not workspace_name or workspace_name in tools.get_workspaces(project) + ['last_used']:
+        workspace_name = (tools.input_text("What name for your workspace?") or '').strip()
+    if not workspace_name:
+        return
+    if workspace_name in tools.get_workspaces(project) + ['last_used']:
         print(f"Workspace {workspace_name} is empty or already exists")
         return
     if not db_name:
-        db_name = tools.input_text("What database name to use?").strip()
-        if not db_name:
-            print("Empty db_name, closing...")
-            return
+        db_name = (tools.input_text("What database name to use?") or '').strip()
+    if not db_name:
+        return
     if not modules_csv:
         modules_csv = tools.input_text("What modules to use? (CSV)").strip()
-        if not modules_csv:
-            print("Empty list of modules, closing...")
-            return
-    tools.create_workspace(workspace_name, db_name, modules_csv)
-    checkout(workspace_name)
+    if not modules_csv:
+        return
+    repos = checkout(workspace_name)
+    tools.create_workspace(workspace_name, db_name, modules_csv, repos)
 
 
 # OPERATIONS ---------------------------------
@@ -279,6 +279,7 @@ def checkout(workspace_name: Optional[str] = Argument(None, help=workspace_name_
         workspace = tools.get_workspace(project, workspace_name)
         if workspace:
             repos = workspace.repos
+
     repos = repos or tools.ask_repos_and_branches(project, "checkout")
 
     for repo_name, repo in repos.items():
