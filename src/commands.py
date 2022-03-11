@@ -121,6 +121,8 @@ def create(
     if not modules_csv:
         return
     repos = checkout(workspace_name)
+    if not repos:
+        return
     tools.create_workspace(workspace_name, db_name, modules_csv, repos)
 
 
