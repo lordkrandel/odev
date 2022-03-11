@@ -3,11 +3,8 @@
 
 import json
 import os
-import logging
 from repo import Repo
 from json_mixin import JsonMixin
-
-_logger = logging.getLogger(__name__)
 
 
 class Workspace(JsonMixin):
@@ -30,7 +27,7 @@ class Workspace(JsonMixin):
             try:
                 repos[repo_name] = Repo.from_json(repo)
             except Exception as e:
-                _logger.warning("Cannot read repository %s, %s", data.get('name'), e)
+                print(f"Cannot read repository {data.get('name')}, {e}")
 
         return Workspace(
             data.get('name', ''),
