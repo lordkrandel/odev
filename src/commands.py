@@ -213,7 +213,6 @@ def setup(db_name):
             reqs_file = repo_path / 'requirements.txt'
             env.context.run(f"pip install -r {reqs_file}")
 
-
 # GIT ---------------------------------------------------
 @odev.command()
 def status(extended: bool = True):
@@ -294,7 +293,6 @@ def checkout(workspace_name: Optional[str] = Argument(None, help=workspace_name_
 
     return repos
 
-
 # FILES ------------------------------------------------------------
 
 @odev.command()
@@ -318,7 +316,6 @@ def hook(workspace_name: Optional[str] = Argument(None, help=workspace_name_help
                    'shell')
         return
     tools.cat(hook_fullpath)
-
 
 @odev.command()
 def rc(workspace_name: Optional[str] = Argument(None, help=workspace_name_help), edit: bool = False):
