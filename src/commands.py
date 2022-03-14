@@ -298,7 +298,9 @@ def checkout(workspace_name: Optional[str] = Argument(None, help=workspace_name_
 # FILES ------------------------------------------------------------
 
 @odev.command()
-def hook(workspace_name: Optional[str] = Argument(None, help=workspace_name_help), edit: bool = False):
+def hook(workspace_name: Optional[str] = Argument(None, help=workspace_name_help),
+         edit: bool = False,
+         run: bool = False):
     """
         Display or edit the post_hook python file.
     """
@@ -307,6 +309,13 @@ def hook(workspace_name: Optional[str] = Argument(None, help=workspace_name_help
     hook_fullpath = paths.workspace(workspace.name) / workspace.post_hook_script
     if edit:
         External.edit(Git.get_editor(), hook_fullpath)
+        return
+    if run:
+        Odoo.start(project.relative('odoo'),
+                   project.relative(workspace.rc_file),
+                   project.relative(workspace.venv_path),
+                   None, ' < ' + str(hook_fullpath),
+                   'shell')
         return
     tools.cat(hook_fullpath)
 
@@ -320,7 +329,8 @@ def rc(workspace_name: Optional[str] = Argument(None, help=workspace_name_help),
     workspace = tools.get_workspace(project, workspace_name)
     rc_fullpath = paths.current() / workspace.rc_file
     if edit:
-        return External.edit(Git.get_editor(), rc_fullpath)
+        External.edit(Git.get_editor(), rc_fullpath)
+        return
     tools.cat(rc_fullpath)
 
 # DB ------------------------------------------------------------
@@ -331,6 +341,7 @@ def db_clear(db_name: Optional[str] = Argument(None, help="Database name")):
          Clear database by dropping and recreating it.
     """
     return PgSql.erase(db_name)
+
 
 @odev.command()
 def db_dump(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
