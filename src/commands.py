@@ -143,7 +143,7 @@ def start(workspace_name: Optional[str] = Argument(None, help=workspace_name_hel
                demo=demo)
 
 @odev.command()
-def start_tests(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags")):
+def start_tests(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags"), fast: bool = False):
     """
         Start Odoo with the tests-enable flag on.
         This will install the demo data.
@@ -153,7 +153,7 @@ def start_tests(tags: Optional[str] = Argument(None, help="Corresponding to --te
     Odoo.start_tests(project.relative('odoo'),
                      project.relative(workspace.rc_file),
                      project.relative(workspace.venv_path),
-                     workspace.modules,
+                     workspace.modules if not fast else [],
                      tags)
 
 @odev.command()
