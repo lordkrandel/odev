@@ -160,6 +160,13 @@ def select_branch(project, repo, action, choices=None, remote=None):
     if branch:
         return Repo(repo.name, repo.dev, repo.origin, remote, branch)
 
+# Runbot -----------------------------------------------
+
+def open_runbot(project, workspace):
+    url = f"https://runbot.odoo.com/runbot/r-d-1?search={workspace.repos['odoo'].branch}"
+    webbrowser.open(url)
+
+
 # Hub --------------------------------------------------
 
 def open_hub(project, workspace):

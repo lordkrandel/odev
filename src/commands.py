@@ -417,3 +417,14 @@ def hub():
     project = tools.get_project()
     workspace = tools.get_workspace(project)
     tools.open_hub(project, workspace)
+
+# RUNBOT ---------------------------------------------------------
+
+@odev.command()
+def runbot():
+    """
+        Open runbot in a browser for current bundle.
+    """
+    project = tools.get_project()
+    workspace = tools.get_workspace(project)
+    tools.open_runbot(project, workspace)
