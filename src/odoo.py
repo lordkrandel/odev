@@ -24,7 +24,7 @@ class Odoo(External):
 
     @classmethod
     def start_tests(cls, odoo_bin_path, odoo_rc_fullpath, venv_path, modules, tags=None):
-        tags = f"--test-tags={tags}" or ""
+        tags = f"--test-tags={tags}" if tags else ""
         cls.start(odoo_bin_path,
                   odoo_rc_fullpath,
                   venv_path,
