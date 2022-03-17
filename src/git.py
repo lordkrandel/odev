@@ -55,11 +55,13 @@ class Git(External):
             return context.run('git branch --show-current', pty=True, hide='out').stdout.strip()
 
     @classmethod
-    def get_remote_branches(cls, path):
+    def get_remote_branches(cls, path, remote=None):
         context = invoke.Context()
+        len_remote = len(remote) + 1 if remote else 0
         with context.cd(path):
-            entries = context.run('git branch -r', pty=False, hide='out').stdout.split('\n')
-            return [x.strip() for x in entries]
+            command = 'git branch -r' + (('l "' + remote + '/*"') if remote else '')
+            entries = context.run(command, pty=False, hide='out').stdout.split('\n')
+            return [x.strip()[len_remote:] for x in entries]
 
     @classmethod
     def fetch(cls, base_path, repo_name, remote_name, branch_name):

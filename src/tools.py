@@ -12,11 +12,14 @@ import sys
 import paths
 import questionary
 import shutil
+import webbrowser
 
 custom_style = questionary.Style.from_dict({
     "completion-menu": "bg:#222222",
     "answer": "fg:#ffffee nobold",
 })
+
+# Files handling -------------------------------------------
 
 def cat(fullpath, encoding="UTF-8"):
     with open(fullpath, "r", encoding=encoding) as f:
@@ -24,8 +27,7 @@ def cat(fullpath, encoding="UTF-8"):
     for line in lines:
         print(line.rstrip())
 
-def input_text(text):
-    return questionary.text(text, style=custom_style, qmark=consts.QMARK).ask()
+# Project handling ---------------------------------------------
 
 def get_projects():
     return Projects.load_json(paths.projects())
@@ -47,28 +49,8 @@ def get_project():
         current_project = Projects.create_project(paths.current(), paths.current_digest())
     return current_project
 
-def get_workspace(project, workspace_name=None):
-    if not workspace_name or workspace_name == 'last_used':
-        workspace_name = project.last_used
-    return Workspace.load_json(paths.workspace_file(workspace_name))
-
-def get_workspaces(project):
-    return sorted([
-        os.path.relpath(x, paths.workspaces()) for x in paths.workspaces().iterdir()
-    ])
-
-def select_workspace(action, project):
-    workspaces = get_workspaces(project) + ['last_used']
-    return select("workspace", action, workspaces, questionary.autocomplete)
-
-def select_repositories(action, workspace=None, checked=None):
-    if checked:
-        choices = [questionary.Choice(x, checked=(x in checked)) for x in template_repos]
-    elif workspace:
-        choices = workspace.repos
-    else:
-        choices = template_repos.keys()
-    return {repo_name : template_repos[repo_name] for repo_name in checkbox("repository", action, choices)}
+def delete_project(project_name):
+    Projects.delete_project(project_name)
 
 def select_project(action, project_name=None):
     projects = get_projects()
@@ -79,13 +61,17 @@ def select_project(action, project_name=None):
             return []
     return projects.get(project_name, [])
 
-def select_branch(repo_name, choices, action):
-    return questionary.autocomplete(
-        f"[{repo_name}] Which branch do you want to {action} (<remote>/<branch>)?",
-        choices=choices,
-        style=custom_style,
-        qmark=consts.QMARK
-    ).ask() or []
+# Workspace handling ------------------------------------------
+
+def get_workspace(project, workspace_name=None):
+    if not workspace_name or workspace_name == 'last_used':
+        workspace_name = project.last_used
+    return Workspace.load_json(paths.workspace_file(workspace_name))
+
+def get_workspaces(project):
+    return sorted([
+        os.path.relpath(x, paths.workspaces()) for x in paths.workspaces().iterdir()
+    ])
 
 def create_workspace(workspace_name, db_name, modules_csv, repos=None):
     repos = repos or select_repositories("checkout", workspace=None, checked=main_repos)
@@ -105,16 +91,96 @@ def create_workspace(workspace_name, db_name, modules_csv, repos=None):
         post_hook_file.write(post_hook_template)
     return repos
 
-def set_last_used(project_name, workspace_name):
+def set_last_used(project_name, workspace_name=None):
+    if not workspace_name:
+        workspace_name = "master"
     projects = Projects.load()
     projects[project_name].last_used = workspace_name
     projects.save()
 
+def delete_workspace(workspace_name):
+    shutil.rmtree(paths.workspace(workspace_name))
+
+def select_workspace(action, project):
+    workspaces = get_workspaces(project) + ['last_used']
+    return select("workspace", action, workspaces, questionary.autocomplete)
+
+# Repository and branches ------------------------------------
+
+def select_repos_and_branches(project, action, workspace=None):
+    repos = {}
+    for repo_name, repo in select_repositories(action, workspace, checked=main_repos).items():
+        repos[repo_name] = select_branch(project, repo, action)
+    return repos
+
+def select_repo_and_branch(project, action, workspace=None):
+    repo = select_repository(project, action, workspace)
+    if repo:
+        return select_branch(project, repo, action)
+
+# Repositories -----------------------------------------------
+
+def select_repositories(action, workspace=None, checked=None):
+    if checked:
+        choices = [questionary.Choice(x, checked=(x in checked)) for x in template_repos]
+    elif workspace:
+        choices = workspace.repos
+    else:
+        choices = template_repos.keys()
+    repos = workspace.repos if workspace else template_repos
+    return {repo_name : repos[repo_name] for repo_name in checkbox("repository", action, choices)}
+
+def select_repository(project, action, workspace=None):
+    repos = workspace.repos if workspace else template_repos
+    repo_name = select("repository", action, repos, select_function=questionary.select)
+    if repo_name:
+        repo = repos[repo_name]
+        return Repo(repo.name, repo.dev, repo.origin, repo.remote, repo.branch)
+
+# Remotes -----------------------------------------------------
+
+def select_remote(action, remote=None, context=None):
+    return remote or select("remote", action, ["origin", "dev"],
+                            select_function=questionary.select,
+                            context=context)
+
+# Branches ----------------------------------------------------
+
+def select_branch(project, repo, action, choices=None, remote=None):
+    if not choices:
+        remote = select_remote(action, remote, context=repo.name)
+        choices = Git.get_remote_branches(project.relative(repo.name), remote)
+    prefix = f"{repo.name} > " if not remote else f"{repo.name}/{remote} > "
+    branch = questionary.autocomplete(
+        f"{prefix}Which branch do you want to {action}?",
+        choices=choices,
+        style=custom_style,
+        qmark=consts.QMARK
+    ).ask()
+    if branch:
+        return Repo(repo.name, repo.dev, repo.origin, remote, branch)
+
+# Hub --------------------------------------------------
+
+def open_hub(project, workspace):
+    base_url = "https://www.github.com"
+    repo = select_repo_and_branch(project, "hub", workspace=None)
+    if repo:
+        url_repo_part = getattr(repo, repo.remote).split(':')[1]
+        url = f"{base_url}/{url_repo_part}/tree/{repo.branch}"
+        webbrowser.open(url)
+
+# Questionary helpers --------------------------------------
+
+def input_text(text):
+    return questionary.text(text, style=custom_style, qmark=consts.QMARK).ask()
+
 def checkbox(subject, action, choices):
     return select(subject, action, choices, questionary.checkbox)
 
-def select(subject, action, choices, select_function=questionary.rawselect):
-    return select_function(f"Which {subject} do you want to {action}?",
+def select(subject, action, choices, select_function=questionary.rawselect, context=None):
+    prefix = f"{context} > " if context else ''
+    return select_function(f"{prefix}Which {subject} do you want to {action}?",
                            choices=choices,
                            style=custom_style,
                            qmark=consts.QMARK).ask() or []
@@ -123,20 +189,3 @@ def confirm(action):
     return questionary.confirm(f"Are you sure you want to {action}?",
                                style=custom_style,
                                qmark=consts.QMARK).ask()
-
-def delete_project(project_name):
-    Projects.delete_project(project_name)
-
-def delete_workspace(workspace_name):
-    shutil.rmtree(paths.workspace(workspace_name))
-
-def ask_repos_and_branches(project, action, workspace=None):
-    repos = {}
-    for repo_name, repo in select_repositories(action, workspace, checked=main_repos).items():
-        # all the available branch names
-        branch_choices = Git.get_remote_branches(project.relative(repo_name))
-        answer = select_branch(repo_name, branch_choices, action)
-        remote_name, branch_name = answer.split('/')
-        repos[repo_name] = Repo(repo.name, repo.dev, repo.origin, remote_name, branch_name)
-
-    return repos

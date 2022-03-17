@@ -93,6 +93,8 @@ def delete_workspace(workspace_name: Optional[str] = Argument(None, help=workspa
     if not tools.confirm(f"delete {paths.workspace(workspace_name)}"):
         return
     tools.delete_workspace(workspace_name)
+    if project.last_used == workspace_name:
+        tools.set_last_used(project.name)
 
 @odev.command()
 def create(
@@ -124,6 +126,7 @@ def create(
     if not repos:
         return
     tools.create_workspace(workspace_name, db_name, modules_csv, repos)
+    tools.set_last_used(project.name, workspace_name)
 
 
 # OPERATIONS ---------------------------------
@@ -170,6 +173,7 @@ def load(workspace_name: Optional[str] = Argument(None, help=workspace_name_help
         print("Cannot load, changes present.")
         return
     checkout(workspace_name)
+    tools.set_last_used(project.name, workspace_name)
 
 @odev.command()
 def shell(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
@@ -251,7 +255,7 @@ def fetch(origin: bool = False):
     """
     project = tools.get_project()
     workspace = tools.get_workspace(project)
-    for repo_name, repo in tools.select_repositories("fetch", workspace.items()):
+    for repo_name, repo in tools.select_repositories("fetch", workspace, checked=main_repos).items():
         print(f"Fetching {repo_name}...")
         if origin:
             Git.fetch(project.path, repo_name, "origin", "")
@@ -265,7 +269,7 @@ def pull():
     """
     project = tools.get_project()
     workspace = tools.get_workspace(project)
-    for repo_name in tools.select_repositories("pull", workspace):
+    for repo_name in tools.select_repositories("pull", workspace, checked=main_repos):
         print(f"Pulling {repo_name}...")
         Git.pull(project.relative(repo_name))
 
@@ -276,20 +280,19 @@ def checkout(workspace_name: Optional[str] = Argument(None, help=workspace_name_
     """
     project = tools.get_project()
     repos = None
+    workspace = None
     if workspace_name:
         workspace = tools.get_workspace(project, workspace_name)
         if workspace:
             repos = workspace.repos
 
-    repos = repos or tools.ask_repos_and_branches(project, "checkout")
+    repos = repos or tools.select_repos_and_branches(project, "checkout", workspace)
 
     for repo_name, repo in repos.items():
         print(f"Fetching {repo_name} {repo.remote}/{repo.branch}...")
         Git.fetch(project.path, repo_name, repo.remote, repo.branch)
         print(f"Checking out {repo_name} {repo.remote}/{repo.branch}...")
         Git.checkout(project.relative(repo_name), repo.branch)
-
-    tools.set_last_used(project.name, workspace_name)
 
     return repos
 
@@ -327,8 +330,8 @@ def rc(workspace_name: Optional[str] = Argument(None, help=workspace_name_help),
     rc_fullpath = paths.current() / workspace.rc_file
     if edit:
         External.edit(Git.get_editor(), rc_fullpath)
-        return
-    tools.cat(rc_fullpath)
+    else:
+        tools.cat(rc_fullpath)
 
 # DB ------------------------------------------------------------
 
@@ -338,7 +341,6 @@ def db_clear(db_name: Optional[str] = Argument(None, help="Database name")):
          Clear database by dropping and recreating it.
     """
     return PgSql.erase(db_name)
-
 
 @odev.command()
 def db_dump(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
@@ -404,3 +406,14 @@ def db_init(workspace_name: Optional[str] = Argument(None, help=workspace_name_h
     if not stop:
         print('Starting Odoo...')
         Odoo.start(odoo_path, rc_file_path, venv_path, None)
+
+# HUB ------------------------------------------------------------
+
+@odev.command()
+def hub():
+    """
+        Open Github in a browser on a branch of a given repo.
+    """
+    project = tools.get_project()
+    workspace = tools.get_workspace(project)
+    tools.open_hub(project, workspace)
