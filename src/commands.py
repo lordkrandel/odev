@@ -176,16 +176,18 @@ def load(workspace_name: Optional[str] = Argument(None, help=workspace_name_help
     tools.set_last_used(project.name, workspace_name)
 
 @odev.command()
-def shell(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
+def shell(interface: Optional[str] = Argument("python", help="Type of shell interface (ipython|ptpython|bpython)"),
+          workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
     """
         Starts Odoo as an interactive shell.
     """
     project = tools.get_project()
     workspace = tools.get_workspace(project, workspace_name)
+    interface = f'--shell-interface={interface}' if interface else ''
     Odoo.start(project.relative('odoo'),
                project.relative(workspace.rc_file),
                project.relative(workspace.venv_path),
-               None, options='', mode='shell', pty=True)
+               None, options=interface, mode='shell', pty=True)
 
 @odev.command()
 def setup(db_name):
@@ -197,9 +199,11 @@ def setup(db_name):
 
     # Create virtualenv
     venv_path = project.relative('.venv')
+    exists = venv_path.exists()
     paths.ensure(venv_path)
     env = Environment(venv_path)
-    env.create()
+    if not exists:
+        env.create()
 
     # Clone the base repos and set the 'dev' remote
     for repo_name, repo in tools.select_repositories("setup", workspace, checked=main_repos).items():
@@ -215,7 +219,8 @@ def setup(db_name):
         with env:
             env.context.run("pip install --upgrade pip")
             reqs_file = repo_path / 'requirements.txt'
-            env.context.run(f"pip install -r {reqs_file}")
+            if reqs_file.exists():
+                env.context.run(f"pip install -r {reqs_file}")
 
 # GIT ---------------------------------------------------
 @odev.command()

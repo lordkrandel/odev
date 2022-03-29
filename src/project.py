@@ -9,7 +9,7 @@ from pathlib import Path
 
 TEMPLATE = """{
     "name": "master",
-    "db_name": "odoodb",
+    "db_name": "{{db_name}}",
     "db_dump_file": "master.dmp",
     "modules": [
         "base"
@@ -89,7 +89,7 @@ class Projects(JsonMixin, dict):
         projects.save_json(paths.projects())
 
     @classmethod
-    def create_project(cls, path, digest):
+    def create_project(cls, path, digest, db_name="odoodb"):
         """
             Create a new project, path, and its 'master' workspace.
         """
@@ -109,6 +109,6 @@ class Projects(JsonMixin, dict):
         master_fullpath = master_path / "master.json"
         if not master_fullpath.exists():
             with open(master_fullpath, "w", encoding="utf-8") as f:
-                f.write(TEMPLATE)
+                f.write(TEMPLATE.replace("{{db_name}}", db_name))
 
         return project

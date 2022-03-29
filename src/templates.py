@@ -41,7 +41,7 @@ template_repos = {
         'master'
     ),
     'iap-apps': Repo(
-        'runbot',
+        'iap-apps',
         'git@github.com:odoo/iap-apps.git',
         'git@github.com:odoo/iap-apps.git',
         'origin',

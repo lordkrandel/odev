@@ -46,7 +46,10 @@ def get_project():
         message = "Project not found, do you want to create a new one?"
         if not questionary.confirm(message, qmark=consts.QMARK).ask():
             sys.exit(1)
-        current_project = Projects.create_project(paths.current(), paths.current_digest())
+        db_name = input_text("What db should it use?")
+        if not db_name:
+            sys.exit(1)
+        current_project = Projects.create_project(paths.current(), paths.current_digest(), db_name)
     return current_project
 
 def delete_project(project_name):
@@ -123,11 +126,13 @@ def select_repo_and_branch(project, action, workspace=None):
 def select_repositories(action, workspace=None, checked=None):
     if checked:
         choices = [questionary.Choice(x, checked=(x in checked)) for x in template_repos]
+        repos = template_repos
     elif workspace:
         choices = workspace.repos
+        repos = workspace.repos if workspace else template_repos
     else:
         choices = template_repos.keys()
-    repos = workspace.repos if workspace else template_repos
+        repos = template_repos
     return {repo_name : repos[repo_name] for repo_name in checkbox("repository", action, choices)}
 
 def select_repository(project, action, workspace=None):
