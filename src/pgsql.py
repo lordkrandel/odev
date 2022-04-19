@@ -28,6 +28,8 @@ class PgSql(External):
 
     @classmethod
     def erase(cls, db_name):
-        output = cls.run(f'dropdb --if-exists {db_name}').stdout.strip()
-        output += '\n' + cls.run(f'createdb {db_name}').stdout.strip()
-        return output
+        return (
+            cls.run(f'dropdb --if-exists {db_name}').stdout.strip()
+            + '\n'
+            + cls.run(f'createdb --encoding=UTF8 --lc-collate=C --template=template0 {db_name}').stdout.strip()
+        )

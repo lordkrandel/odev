@@ -10,14 +10,16 @@ template_repos = {
         'git@github.com:odoo-dev/odoo',
         'git@github.com:odoo/odoo',
         'origin',
-        'master'
+        'master',
+        addons_folders=['./addons']
     ),
     'enterprise': Repo(
         'enterprise',
         'git@github.com:odoo-dev/enterprise',
         'git@github.com:odoo/enterprise',
         'origin',
-        'master'
+        'master',
+        addons_folders=['.']
     ),
     'documentation': Repo(
         'documentation',

@@ -19,6 +19,7 @@ custom_style = questionary.Style.from_dict({
     "answer": "fg:#ffffee nobold",
 })
 
+
 # Files handling -------------------------------------------
 
 def cat(fullpath, encoding="UTF-8"):
@@ -27,10 +28,12 @@ def cat(fullpath, encoding="UTF-8"):
     for line in lines:
         print(line.rstrip())
 
+
 # Project handling ---------------------------------------------
 
 def get_projects():
     return Projects.load_json(paths.projects())
+
 
 def get_project():
     path_hierarchy = [paths.current(), *paths.current().parents]
@@ -52,8 +55,10 @@ def get_project():
         current_project = Projects.create_project(paths.current(), paths.current_digest(), db_name)
     return current_project
 
+
 def delete_project(project_name):
     Projects.delete_project(project_name)
+
 
 def select_project(action, project_name=None):
     projects = get_projects()
@@ -64,6 +69,7 @@ def select_project(action, project_name=None):
             return []
     return projects.get(project_name, [])
 
+
 # Workspace handling ------------------------------------------
 
 def get_workspace(project, workspace_name=None):
@@ -71,10 +77,12 @@ def get_workspace(project, workspace_name=None):
         workspace_name = project.last_used
     return Workspace.load_json(paths.workspace_file(workspace_name))
 
+
 def get_workspaces(project):
     return sorted([
         os.path.relpath(x, paths.workspaces()) for x in paths.workspaces().iterdir()
     ])
+
 
 def create_workspace(workspace_name, db_name, modules_csv, repos=None):
     repos = repos or select_repositories("checkout", workspace=None, checked=main_repos)
@@ -94,6 +102,7 @@ def create_workspace(workspace_name, db_name, modules_csv, repos=None):
         post_hook_file.write(post_hook_template)
     return repos
 
+
 def set_last_used(project_name, workspace_name=None):
     if not workspace_name:
         workspace_name = "master"
@@ -101,12 +110,18 @@ def set_last_used(project_name, workspace_name=None):
     projects[project_name].last_used = workspace_name
     projects.save()
 
+
 def delete_workspace(workspace_name):
     shutil.rmtree(paths.workspace(workspace_name))
 
+
 def select_workspace(action, project):
     workspaces = get_workspaces(project) + ['last_used']
-    return select("workspace", action, workspaces, questionary.autocomplete)
+    result = select("workspace", action, workspaces, questionary.autocomplete)
+    if result == 'last_used':
+        result = project.last_used
+    return result
+
 
 # Repository and branches ------------------------------------
 
@@ -116,10 +131,12 @@ def select_repos_and_branches(project, action, workspace=None):
         repos[repo_name] = select_branch(project, repo, action)
     return repos
 
+
 def select_repo_and_branch(project, action, workspace=None):
     repo = select_repository(project, action, workspace)
     if repo:
         return select_branch(project, repo, action)
+
 
 # Repositories -----------------------------------------------
 
@@ -133,7 +150,8 @@ def select_repositories(action, workspace=None, checked=None):
     else:
         choices = template_repos.keys()
         repos = template_repos
-    return {repo_name : repos[repo_name] for repo_name in checkbox("repository", action, choices)}
+    return {repo_name: repos[repo_name] for repo_name in checkbox("repository", action, choices)}
+
 
 def select_repository(project, action, workspace=None):
     repos = workspace.repos if workspace else template_repos
@@ -142,12 +160,14 @@ def select_repository(project, action, workspace=None):
         repo = repos[repo_name]
         return Repo(repo.name, repo.dev, repo.origin, repo.remote, repo.branch)
 
+
 # Remotes -----------------------------------------------------
 
 def select_remote(action, remote=None, context=None):
     return remote or select("remote", action, ["origin", "dev"],
                             select_function=questionary.select,
                             context=context)
+
 
 # Branches ----------------------------------------------------
 
@@ -164,6 +184,7 @@ def select_branch(project, repo, action, choices=None, remote=None):
     ).ask()
     if branch:
         return Repo(repo.name, repo.dev, repo.origin, remote, branch)
+
 
 # Runbot -----------------------------------------------
 
@@ -182,13 +203,16 @@ def open_hub(project, workspace):
         url = f"{base_url}/{url_repo_part}/tree/{repo.branch}"
         webbrowser.open(url)
 
+
 # Questionary helpers --------------------------------------
 
 def input_text(text):
     return questionary.text(text, style=custom_style, qmark=consts.QMARK).ask()
 
+
 def checkbox(subject, action, choices):
     return select(subject, action, choices, questionary.checkbox)
+
 
 def select(subject, action, choices, select_function=questionary.rawselect, context=None):
     prefix = f"{context} > " if context else ''
@@ -196,6 +220,7 @@ def select(subject, action, choices, select_function=questionary.rawselect, cont
                            choices=choices,
                            style=custom_style,
                            qmark=consts.QMARK).ask() or []
+
 
 def confirm(action):
     return questionary.confirm(f"Are you sure you want to {action}?",

@@ -23,14 +23,16 @@ TEMPLATE = """{
             "dev": "git@github.com:odoo-dev/odoo",
             "origin": "git@github.com:odoo/odoo",
             "remote": "origin",
-            "branch": "master"
+            "branch": "master",
+            "addons_folders": ["./addons"]
         },
         "enterprise": {
             "name": "enterprise",
             "dev": "git@github.com:odoo-dev/enterprise",
             "origin": "git@github.com:odoo/enterprise",
             "remote": "origin",
-            "branch": "master"
+            "branch": "master",
+            "addons_folders": ["."]
         }
     }
 }"""
