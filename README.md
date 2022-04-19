@@ -14,19 +14,25 @@ Commands:
   db-restore        Restore the DB for the selected workspace.
   delete-project    Delete a project.
   delete-workspace  Delete a workspace.
+  deps              Find module dependancy order.
+  dupe-workspace    Duplicate a workspace.
   fetch             Git-fetches multiple repositories.
   hook              Display or edit the post_hook python file.
+  hub               Open Github in a browser on a branch of a given repo.
+  init-tests        Initialize the database, then start Odoo for at_install tests.
   load              Load given workspace into the session.
+  post-tests        Start Odoo for post_install tests.
   project           Display project data for the current folder.
   projects          Display all the available project folders.
   pull              Git-pulls selected repos for current workspace.
   push              Git-pushes multiple repositories.
   rc                View or edit the .odoorc config with default editor.
+  runbot            Open runbot in a browser for current bundle.
   setup             Sets up the main folder, with repos and venv.
   shell             Starts Odoo as an interactive shell.
   start             Start Odoo and reinitialize the workspace's modules.
-  start-tests       Start Odoo with the tests-enable flag on.
   status            Display status for all repos for current workspace.
   workspace         Display currently selected workspace data.
   workspaces        Display all the available workspaces for current project.
+
 ```
