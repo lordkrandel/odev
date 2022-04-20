@@ -416,11 +416,10 @@ def db_restore(workspace_name: Optional[str] = Argument(None, help=workspace_nam
     print("Restoring {workspace.db_name} <- {dump_fullpath}")
     PgSql.restore(workspace.db_name, dump_fullpath)
 
-
 @odev.command()
 def post_tests(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags"), fast: bool = False):
     """
-        Start Odoo for post_install tests.
+        Start Odoo and run post_install tests.
     """
     project = tools.get_project()
     workspace = tools.get_workspace(project)
@@ -436,7 +435,7 @@ def post_tests(tags: Optional[str] = Argument(None, help="Corresponding to --tes
 @odev.command()
 def init_tests(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags")):
     """
-         Initialize the database, then start Odoo for at_install tests.
+         Init db and run Odoo's at_install tests.
          This will install the demo data.
     """
     project = tools.get_project()
@@ -456,6 +455,15 @@ def init_tests(tags: Optional[str] = Argument(None, help="Corresponding to --tes
                      project.relative(workspace.venv_path),
                      workspace.modules,
                      f"{(tags + ',') if tags else ''}-post_install")
+
+
+@odev.command()
+def test(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags")):
+    """
+        Initialize db and run all tests.
+    """
+    post_tests(tags)
+    init_tests(tags)
 
 
 @odev.command()
