@@ -11,7 +11,7 @@ template_repos = {
         'git@github.com:odoo/odoo',
         'origin',
         'master',
-        addons_folders=['./addons']
+        ["addons", "odoo/addons"]
     ),
     'enterprise': Repo(
         'enterprise',
@@ -19,35 +19,39 @@ template_repos = {
         'git@github.com:odoo/enterprise',
         'origin',
         'master',
-        addons_folders=['.']
+        ['.']
     ),
     'documentation': Repo(
         'documentation',
         'git@github.com:odoo/documentation.git',
         'git@github.com:odoo/documentation.git',
         'origin',
-        'master'
+        'master',
+        []
     ),
     'runbot': Repo(
         'runbot',
         'git@github.com:odoo/runbot.git',
         'git@github.com:odoo/runbot.git',
         'origin',
-        '13.0'
+        '13.0',
+        []
     ),
     'upgrade': Repo(
         'runbot',
         'git@github.com:odoo/upgrade.git',
         'git@github.com:odoo/upgrade.git',
         'origin',
-        'master'
+        'master',
+        []
     ),
     'iap-apps': Repo(
         'iap-apps',
         'git@github.com:odoo/iap-apps.git',
         'git@github.com:odoo/iap-apps.git',
         'origin',
-        'master'
+        'master',
+        []
     )
 }
 

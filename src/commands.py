@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 import os
+import sys
 import ast
 import itertools
 
@@ -113,13 +114,13 @@ def dupe_workspace(workspace_name: Optional[str] = Argument(None, help=workspace
     shutil.copytree(sourcepath, destpath)
 
     print('Changing the workspace file')
-    source_json_path = sourcepath / f"{workspace_name}.json"
+    source_json_path = destpath / f"{workspace_name}.json"
     dest_json_path = destpath / f"{dest_workspace_name}.json"
     shutil.move(source_json_path, dest_json_path)
     with fileinput.FileInput(dest_json_path, inplace=True, backup='.bak') as f:
         for line in f:
             print(line.replace(workspace_name, dest_workspace_name), end='')
-    tools.set_last_used(project.name, workspace=dest_workspace_name)
+    tools.set_last_used(project.name, workspace_name=dest_workspace_name)
 
 
 @odev.command()
@@ -232,14 +233,6 @@ def setup(db_name):
     project = tools.get_project()
     workspace = tools.get_workspace(project)
 
-    # Create virtualenv
-    venv_path = project.relative('.venv')
-    exists = venv_path.exists()
-    paths.ensure(venv_path)
-    env = Environment(venv_path)
-    if not exists:
-        env.create()
-
     # Clone the base repos and set the 'dev' remote
     for repo_name, repo in tools.select_repositories("setup", workspace, checked=main_repos).items():
         repo_path = project.relative(repo_name)
@@ -248,14 +241,27 @@ def setup(db_name):
         paths.ensure(repo_path)
         Git.clone(repo.origin, repo.branch, repo_path)
         Git.add_remote('dev', repo.dev, repo_path)
+        _setup_requisites(project.relative('.venv'),
+                          added=['ipython', 'pylint'],
+                          reqs_file=f"{repo_name}/requirements.txt")
 
-        # Install the requirements
-        print(f"installing {repo_name}/requirements.txt...")
-        with env:
-            env.context.run("pip install --upgrade pip")
-            reqs_file = repo_path / 'requirements.txt'
-            if reqs_file.exists():
-                env.context.run(f"pip install -r {reqs_file}")
+
+def _setup_requisites(venv_path, added=None, reqs_file=None):
+    venv_path = Path(venv_path)
+    exists = venv_path.exists()
+    paths.ensure(venv_path)
+    env = Environment(venv_path)
+    if not exists:
+        env.create()
+    added = added or []
+    with env:
+        print("installing pip...")
+        env.context.run("pip install --upgrade pip")
+        if reqs_file and reqs_file.exists():
+            print(f"installing {reqs_file}")
+            env.context.run(f"pip install -r {reqs_file}")
+        for module in added:
+            env.context.run(f"pip install --upgrade {module}")
 
 
 # GIT ---------------------------------------------------
@@ -419,12 +425,22 @@ def db_restore(workspace_name: Optional[str] = Argument(None, help=workspace_nam
 @odev.command()
 def post_tests(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags"), fast: bool = False):
     """
-        Start Odoo and run post_install tests.
+         Init db (if not fast) and run Odoo's post_install tests.
+         This will install the demo data.
     """
     project = tools.get_project()
     workspace = tools.get_workspace(project)
+
+    # Eventually erase the database
+    if not fast:
+        print(f'Erasing {workspace.db_name}...')
+        db_clear(workspace.db_name)
+
     rc_fullpath = project.relative(workspace.rc_file)
     Rc(rc_fullpath).check_db_name(workspace.db_name)
+
+    # Running Odoo in the steps required to initialize the database
+    print('Starting tests with modules %s ...', ','.join(workspace.modules))
     Odoo.start_tests(project.relative('odoo'),
                      rc_fullpath,
                      project.relative(workspace.venv_path),
@@ -511,6 +527,21 @@ def db_init(workspace_name: Optional[str] = Argument(None, help=workspace_name_h
         Odoo.start(odoo_path, rc_fullpath, venv_path, None)
 
 
+# VENV -----------------------------------------------------------
+
+@odev.command()
+def activate():
+    """
+        Path to the activate script for the current virtual environment.
+    """
+    out, sys.stdout = sys.stdout, None
+    project = tools.get_project()
+    workspace = tools.get_workspace(project)
+    sys.stdout = out
+    activate_path = os.path.join(project.path, workspace.venv_path, "bin", "activate")
+    print(activate_path)
+
+
 # HUB ------------------------------------------------------------
 
 @odev.command()
@@ -521,6 +552,27 @@ def hub():
     project = tools.get_project()
     workspace = tools.get_workspace(project)
     tools.open_hub(project, workspace)
+
+
+# LINT -----------------------------------------------------------
+
+@odev.command()
+def lint():
+    """
+        Open Github in a browser on a branch of a given repo.
+    """
+    project = tools.get_project()
+    workspace = tools.get_workspace(project)
+
+    # Running Odoo in the steps required to initialize the database
+    print("Pylint checking...")
+    rc_fullpath = project.relative(workspace.rc_file)
+    Rc(rc_fullpath).check_db_name(workspace.db_name)
+    Odoo.start_tests(project.relative('odoo'),
+                     rc_fullpath,
+                     project.relative(workspace.venv_path),
+                     ['test_lint'],
+                     "/test_lint")
 
 
 # RUNBOT ---------------------------------------------------------

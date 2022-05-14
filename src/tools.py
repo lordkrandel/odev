@@ -158,7 +158,7 @@ def select_repository(project, action, workspace=None):
     repo_name = select("repository", action, repos, select_function=questionary.select)
     if repo_name:
         repo = repos[repo_name]
-        return Repo(repo.name, repo.dev, repo.origin, repo.remote, repo.branch)
+        return Repo(repo.name, repo.dev, repo.origin, repo.remote, repo.branch, repo.addons_folders)
 
 
 # Remotes -----------------------------------------------------
@@ -183,7 +183,7 @@ def select_branch(project, repo, action, choices=None, remote=None):
         qmark=consts.QMARK
     ).ask()
     if branch:
-        return Repo(repo.name, repo.dev, repo.origin, remote, branch)
+        return Repo(repo.name, repo.dev, repo.origin, remote, branch, repo.addons_folders)
 
 
 # Runbot -----------------------------------------------
