@@ -48,12 +48,12 @@ class Project(JsonMixin):
     @classmethod
     def from_json(cls, data):
         return Project(data.get('name'),
-                       data.get('path'),
+                       str(data.get('path')),
                        data.get('last_used'))
 
     def to_json(self):
         data = {'name': self.name,
-                'path': self.path,
+                'path': str(self.path),
                 'last_used': self.last_used}
         return json.dumps(data, indent=4)
 

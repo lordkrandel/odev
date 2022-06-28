@@ -6,6 +6,7 @@ from workspace import Workspace
 from git import Git
 from templates import template_repos, main_repos, post_hook_template
 from repo import Repo
+from pathlib import Path
 import consts
 import os
 import sys
@@ -35,16 +36,23 @@ def get_projects():
     return Projects.load_json(paths.projects())
 
 
-def get_project():
+def search_project():
     path_hierarchy = [paths.current(), *paths.current().parents]
     for path in path_hierarchy:
         digest = paths.digest(path)
         current_project = get_projects().get(digest)
         if current_project:
-            if path != paths.current():
-                print(f"Current working directory is not project root {path}")
-                os.chdir(path)
-            break
+            return current_project
+    return None
+
+def get_project():
+    current_project = search_project()
+    if current_project:
+        path = Path(current_project.path)
+        if path != paths.current():
+            print(f"Current working directory is not project root {path}")
+            os.chdir(path)
+        current_project.path = path
     else:
         message = "Project not found, do you want to create a new one?"
         if not questionary.confirm(message, qmark=consts.QMARK).ask():
@@ -53,6 +61,7 @@ def get_project():
         if not db_name:
             sys.exit(1)
         current_project = Projects.create_project(paths.current(), paths.current_digest(), db_name)
+        current_project.path = paths.current()
     return current_project
 
 

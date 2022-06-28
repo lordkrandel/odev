@@ -16,6 +16,7 @@ class Odoo(External):
         base_path = Path(bin_path).absolute().parent
         print(f"{80 * '-'}")
         print("Odoo starting...")
+        print(f"    Odoo path: {bin_path}/odoo-bin")
         print(f"    Database: {rc.db_name}")
         print(f"    Addons: {rc._addons(base_path)}")
         print(f"    Virtualenv: {Path(venv_path).relative_to(base_path)}")
@@ -39,7 +40,7 @@ class Odoo(External):
         context = invoke.Context()
         with context.cd(bin_path):
             venv_script_path = os.path.join(venv_path, 'bin/activate')
-            command = f'source {venv_script_path} && ./odoo-bin {mode} {cls.get_demo_option(demo)} -c {rc_fullpath} {modules} {options}'
+            command = f'source {venv_script_path} && {bin_path}/odoo-bin {mode} {cls.get_demo_option(demo)} -c {rc_fullpath} {modules} {options}'
             print(command)
             context.run(command, pty=pty, in_stream=in_stream)
 

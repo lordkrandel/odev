@@ -75,11 +75,17 @@ def workspace(workspace_name: Optional[str] = Argument(None, help=workspace_name
     """
     project = tools.get_project()
     workspace = tools.get_workspace(project, workspace_name)
-    if not edit:
-        print(f"{workspace.name}:: {workspace.to_json()}")
-        return
-    editor = Git.get_editor()
     workspace_file = paths.workspace_file(workspace.name)
+
+    print(f"{workspace.name}::")
+    print(f"    {'project_folder:':18} {project.path}")
+    print(f"    {'workspace_folder:':18} {paths.workspace(workspace.name)}")
+    print(f"    {'workspace_file:':18} {paths.workspace_file(workspace.name)}")
+    if not edit:
+        print(workspace.to_json())
+        return
+
+    editor = Git.get_editor()
     External.edit(editor, workspace_file)
 
 
@@ -298,6 +304,17 @@ def push(force: bool = False):
 
 
 @odev.command()
+def diff(origin: bool = False):
+    """
+        Git-diffs all repositories.
+    """
+    project = tools.get_project()
+    workspace = tools.get_workspace(project)
+    for repo_name in workspace.repos:
+        Git.diff(project.path, repo_name)
+
+
+@odev.command()
 def fetch(origin: bool = False):
     """
         Git-fetches multiple repositories.
@@ -396,7 +413,9 @@ def db_clear(db_name: Optional[str] = Argument(None, help="Database name")):
     """
          Clear database by dropping and recreating it.
     """
-    return PgSql.erase(db_name)
+    project = tools.get_project()
+    workspace = tools.get_workspace(project)
+    return PgSql.erase(db_name or workspace.db_name)
 
 
 @odev.command()
@@ -588,7 +607,6 @@ def runbot():
 
 
 # DEPS -----------------------------------------------------------
-
 @odev.command()
 def deps(module):
     """

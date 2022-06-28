@@ -64,6 +64,14 @@ class Git(External):
             return [x.strip()[len_remote:] for x in entries]
 
     @classmethod
+    def diff(cls, base_path, repo_name):
+        path = os.path.join(base_path, repo_name)
+        context = invoke.Context()
+        with context.cd(path):
+            print(f'{repo_name}:: {"-" * 80}')
+            context.run('git diff')
+
+    @classmethod
     def fetch(cls, base_path, repo_name, remote_name, branch_name):
         path = os.path.join(base_path, repo_name)
         context = invoke.Context()
