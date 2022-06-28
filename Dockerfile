@@ -17,4 +17,4 @@ RUN pip install --user -r requirements.txt
 
 COPY --chown=userperson:userperson . .
 
-CMD ["python3", "./run_tests.py"]
+CMD ["./run_tests.sh"]

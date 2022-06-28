@@ -1,7 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 
-CURDIR="$(dirname -- "$(which -- "$0" 2>/dev/null || realpath -- "./$0")")"
-pushd $CURDIR
-export PYTHONPATH=$PYTHONPATH:$CURDIR/src
+export PYTHONPATH=$PYTHONPATH:./src
 python3 -m unittest discover -s tests
-popd
