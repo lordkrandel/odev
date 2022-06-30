@@ -1,18 +1,24 @@
 ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+APP_NAME:=odev
 
 .ONESHELL:
 
-drebuild:
+test_build_nc:
 	@pushd $(ROOT_DIR) > /dev/null
-	@docker build --no-cache --tag odev .
+	@docker build --no-cache --tag $(APP_NAME) .
 	@popd > /dev/null
 
-dbuild:
+test_build:
 	@pushd $(ROOT_DIR) > /dev/null
-	@docker build --tag odev .
+	@docker build --tag $(APP_NAME) .
 	@popd > /dev/null
 
-drun:
+test_run:
 	@pushd $(ROOT_DIR) > /dev/null
-	@docker run odev
+	@docker run $(APP_NAME)
 	@popd > /dev/null
+
+test: test_build test_run
+
+stop:
+	docker stop $(APP_NAME); docker rm $(APP_NAME)
