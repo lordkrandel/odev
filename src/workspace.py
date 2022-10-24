@@ -6,7 +6,6 @@ import os
 from repo import Repo
 from json_mixin import JsonMixin
 
-
 class Workspace(JsonMixin):
 
     def __init__(self, name, db_name, repos, modules, db_dump_file,

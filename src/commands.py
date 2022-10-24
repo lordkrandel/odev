@@ -19,16 +19,32 @@ from external import External
 from git import Git
 from pgsql import PgSql
 from env import Environment
-from templates import main_repos
+from templates import template_repos, main_repos, post_hook_template
 from typer import Argument, Typer
+from typer.models import ArgumentInfo
+from workspace import Workspace
 
 from odoo import Odoo
 
-workspace_name_help = "Name of the workspace that holds the database information, omit to use current"
 db_name_help = "Name of the database"
 project_name_help = "Name of the project (md5 of the path)"
 modules_csv_help = "CSV list of modules"
 venv_path_help = "Virtualenv path"
+workspace_name_help = "Name of the workspace that holds the database information, omit to use current"
+
+
+def workspaces_yield(incomplete: str):
+    project = tools.get_project()
+    if project:
+        return [(workspace_name, 'test') for workspace_name in tools.get_workspaces(project)
+                                         if workspace_name.startswith(incomplete)]
+
+
+def WorkspaceNameArgument(default=None, *args, **kwargs):
+    kwargs['help'] = workspace_name_help
+    kwargs['autocompletion'] = workspaces_yield
+    return Argument(default, *args, **kwargs)
+
 
 odev = Typer()
 
@@ -44,8 +60,10 @@ def projects(edit: bool = False):
         editor = Git.get_editor()
         External.edit(editor, paths.projects())
         return
-    for _name, project in tools.get_projects().items():
-        print(f"{project.path}  {project.name}  {paths.config() / 'workspaces' / project.name}")
+    projects = tools.get_projects()
+    if projects:
+        for _name, project in projects.items():
+            print(f"{project.path}  {project.name}  {paths.config() / 'workspaces' / project.name}")
 
 
 @odev.command()
@@ -54,7 +72,8 @@ def project():
         Display project data for the current folder.
     """
     project = tools.get_project()
-    print(f"{project.name}:: {project.to_json()}")
+    if project:
+        print(f"{project.name}:: {project.to_json()}")
 
 
 @odev.command()
@@ -63,18 +82,24 @@ def workspaces():
         Display all the available workspaces for current project.
     """
     project = tools.get_project()
-    print(f"{project.name}::")
-    for workspace_name in tools.get_workspaces(project):
+    if project:
+        print(f"{project.name}::")
+    for workspace_name in workspaces_yield(project):
         print(f"    {workspace_name}")
 
 
+
+
 @odev.command()
-def workspace(workspace_name: Optional[str] = Argument(None, help=workspace_name_help), edit: bool = False):
+def workspace(workspace_name: Optional[str] = WorkspaceNameArgument(), edit: bool = False):
     """
         Display currently selected workspace data.
     """
     project = tools.get_project()
     workspace = tools.get_workspace(project, workspace_name)
+    if not workspace:
+        print("No workspace found")
+        return
     workspace_file = paths.workspace_file(workspace.name)
 
     print(f"{workspace.name}::")
@@ -90,6 +115,21 @@ def workspace(workspace_name: Optional[str] = Argument(None, help=workspace_name
 
 
 @odev.command()
+def workspace_set(workspace_name: Optional[str] = WorkspaceNameArgument()):
+    """
+        Change the current workspace without loading it
+    """
+    project = tools.get_project()
+    old_workspace = tools.get_workspace(project)
+    if not workspace_name:
+        workspace_name = tools.select_workspace("set as current", project)
+        if not workspace_name:
+            return
+
+    tools.set_last_used(project.name, workspace_name=workspace_name)
+    print(f"Current workspace changed: {old_workspace.name} -> {workspace_name}")
+
+
 def delete_project(project_name: Optional[str] = Argument(None, help=project_name_help)):
     """
         Delete a project.
@@ -101,7 +141,7 @@ def delete_project(project_name: Optional[str] = Argument(None, help=project_nam
 
 
 @odev.command()
-def dupe_workspace(workspace_name: Optional[str] = Argument(None, help=workspace_name_help),
+def dupe_workspace(workspace_name: Optional[str] = WorkspaceNameArgument(),
                    dest_workspace_name: Optional[str] = Argument(None, help="Destination name")):
     """
         Duplicate a workspace.
@@ -130,7 +170,7 @@ def dupe_workspace(workspace_name: Optional[str] = Argument(None, help=workspace
 
 
 @odev.command()
-def delete_workspace(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
+def delete_workspace(workspace_name: Optional[str] = WorkspaceNameArgument()):
     """
         Delete a workspace.
     """
@@ -147,7 +187,7 @@ def delete_workspace(workspace_name: Optional[str] = Argument(None, help=workspa
 
 
 @odev.command()
-def create(workspace_name: str = Argument(None, help=workspace_name_help),
+def create(workspace_name: str = Argument(None, help=workspace_name_help, autocompletion=workspaces_yield),
            db_name: str = Argument(None, help=db_name_help),
            modules_csv: str = Argument(None, help=modules_csv_help),
            venv_path: Optional[str] = Argument(None, help=venv_path_help)):
@@ -181,7 +221,7 @@ def create(workspace_name: str = Argument(None, help=workspace_name_help),
 # OPERATIONS ---------------------------------
 
 @odev.command()
-def start(workspace_name: Optional[str] = Argument(None, help=workspace_name_help), fast: bool = False, demo: bool = False):
+def start(workspace_name: Optional[str] = WorkspaceNameArgument(), fast: bool = False, demo: bool = False):
     """
         Start Odoo and reinitialize the workspace's modules.
     """
@@ -198,7 +238,7 @@ def start(workspace_name: Optional[str] = Argument(None, help=workspace_name_hel
 
 
 @odev.command()
-def load(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
+def load(workspace_name: Optional[str] = WorkspaceNameArgument()):
     """
         Load given workspace into the session.
     """
@@ -216,7 +256,7 @@ def load(workspace_name: Optional[str] = Argument(None, help=workspace_name_help
 
 @odev.command()
 def shell(interface: Optional[str] = Argument("python", help="Type of shell interface (ipython|ptpython|bpython)"),
-          workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
+          workspace_name: Optional[str] = WorkspaceNameArgument()):
     """
         Starts Odoo as an interactive shell.
     """
@@ -236,6 +276,13 @@ def setup(db_name):
     """
         Sets up the main folder, with repos and venv.
     """
+    paths.ensure(paths.config())
+    projects_path = Path(paths.projects())
+    if not projects_path.exists():
+        with open(projects_path, "w", encoding="UTF-8") as projects_file:
+            projects_file.write("{\n}")
+    paths.ensure(paths.workspaces())
+
     project = tools.get_project()
     workspace = tools.get_workspace(project)
 
@@ -243,13 +290,41 @@ def setup(db_name):
     for repo_name, repo in tools.select_repositories("setup", workspace, checked=main_repos).items():
         repo_path = project.relative(repo_name)
 
-        print(f"cloning {repo_name}...")
-        paths.ensure(repo_path)
-        Git.clone(repo.origin, repo.branch, repo_path)
-        Git.add_remote('dev', repo.dev, repo_path)
-        _setup_requisites(project.relative('.venv'),
-                          added=['ipython', 'pylint'],
-                          reqs_file=f"{repo_name}/requirements.txt")
+        if repo_path.exists():
+            print(f"{repo_name} already exists...")
+        else:
+            print(f"cloning {repo_name}...")
+            paths.ensure(repo_path)
+            Git.clone(repo.origin, repo.branch, repo_path)
+            Git.add_remote('dev', repo.dev, repo_path)
+            _setup_requisites(project.relative('.venv'),
+                              added=['ipython', 'pylint'],
+                              reqs_file=f"{repo_name}/requirements.txt")
+
+        workspace_name = 'master'
+        workspace_file = paths.workspace_file(workspace_name)
+        workspace_path = paths.workspace(workspace_name)
+        if workspace_file.exists():
+            print(f"{workspace_file} workspace already exists...")
+        else:
+            new_workspace = Workspace(
+                workspace_name,
+                db_name,
+                {k: v for k, v in template_repos.items() if k in main_repos},
+                ['base'],
+                'master.dmp',
+                'post_hook.py',
+                '.venv',
+                '.odoorc')
+            paths.ensure(workspace_path)
+            new_workspace.save_json(workspace_file)
+
+        post_hook_path = workspace_path / "post_hook.py"
+        if not post_hook_path.exists():
+            with open(post_hook_path, "w", encoding="utf-8") as post_hook_file:
+                post_hook_file.write(post_hook_template)
+        else:
+            print(f"{post_hook_path} already exists...")
 
 
 def _setup_requisites(venv_path, added=None, reqs_file=None):
@@ -263,7 +338,7 @@ def _setup_requisites(venv_path, added=None, reqs_file=None):
     with env:
         print("installing pip...")
         env.context.run("pip install --upgrade pip")
-        if reqs_file and reqs_file.exists():
+        if reqs_file and Path(reqs_file).exists():
             print(f"installing {reqs_file}")
             env.context.run(f"pip install -r {reqs_file}")
         for module in added:
@@ -342,8 +417,8 @@ def pull():
 
 
 @odev.command()
-def checkout(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
-    """
+def checkout(workspace_name: Optional[str] = WorkspaceNameArgument()):
+    """Masculine  (or Boy)  na
         Git-checkouts multiple repositories.
     """
     project = tools.get_project()
@@ -368,7 +443,7 @@ def checkout(workspace_name: Optional[str] = Argument(None, help=workspace_name_
 # FILES ------------------------------------------------------------
 
 @odev.command()
-def hook(workspace_name: Optional[str] = Argument(None, help=workspace_name_help),
+def hook(workspace_name: Optional[str] = WorkspaceNameArgument(),
          edit: bool = False,
          run: bool = False):
     """
@@ -393,7 +468,7 @@ def hook(workspace_name: Optional[str] = Argument(None, help=workspace_name_help
 
 
 @odev.command()
-def rc(workspace_name: Optional[str] = Argument(None, help=workspace_name_help), edit: bool = False):
+def rc(workspace_name: Optional[str] = WorkspaceNameArgument(), edit: bool = False):
     """
         View or edit the .odoorc config with default editor.
     """
@@ -419,7 +494,7 @@ def db_clear(db_name: Optional[str] = Argument(None, help="Database name")):
 
 
 @odev.command()
-def db_dump(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
+def db_dump(workspace_name: Optional[str] = WorkspaceNameArgument()):
     """
          Dump the DB for the selected workspace.
     """
@@ -431,7 +506,7 @@ def db_dump(workspace_name: Optional[str] = Argument(None, help=workspace_name_h
 
 
 @odev.command()
-def db_restore(workspace_name: Optional[str] = Argument(None, help=workspace_name_help)):
+def db_restore(workspace_name: Optional[str] = WorkspaceNameArgument()):
     """
          Restore the DB for the selected workspace.
     """
@@ -442,15 +517,36 @@ def db_restore(workspace_name: Optional[str] = Argument(None, help=workspace_nam
     PgSql.restore(workspace.db_name, dump_fullpath)
 
 @odev.command()
-def post_tests(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags"), fast: bool = False):
+def l10n_tests(fast: bool = False):
     """
-         Init db (if not fast) and run Odoo's post_install tests.
-         This will install the demo data.
+        Run l10n tests
     """
+
     project = tools.get_project()
     workspace = tools.get_workspace(project)
 
     # Eventually erase the database
+    if not fast:
+        print(f'Erasing {workspace.db_name}...')
+        db_clear(workspace.db_name)
+
+    rc_fullpath = project.relative(workspace.rc_file)
+    Rc(rc_fullpath).check_db_name(workspace.db_name)
+
+    Odoo.l10n_tests(project.relative('odoo'),
+                    workspace.db_name,
+                    project.relative(workspace.venv_path))
+    # /data/build/odoo/odoo/tests/test_module_operations.py -d 17105465-15-0-l10n_account --data-dir /data/build/datadir --addons-path odoo/addons,odoo/odoo/addons,enterprise --standalone all_l10n
+
+
+def _tests(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags"), fast: bool = False):
+    """
+        Generic test function for all commands.
+    """
+    project = tools.get_project()
+    workspace = tools.get_workspace(project)
+
+    # Erase the database
     if not fast:
         print(f'Erasing {workspace.db_name}...')
         db_clear(workspace.db_name)
@@ -464,7 +560,16 @@ def post_tests(tags: Optional[str] = Argument(None, help="Corresponding to --tes
                      rc_fullpath,
                      project.relative(workspace.venv_path),
                      workspace.modules if not fast else [],
-                     f"{(tags + ',') if tags else ''}-at_install")
+                     tags)
+
+
+@odev.command()
+def post_tests(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags"), fast: bool = False):
+    """
+         Init db (if not fast) and run Odoo's post_install tests.
+         This will install the demo data.
+    """
+    _tests(tags=f"{(tags + ',') if tags else ''}-at_install", fast=fast)
 
 
 @odev.command()
@@ -473,36 +578,29 @@ def init_tests(tags: Optional[str] = Argument(None, help="Corresponding to --tes
          Init db and run Odoo's at_install tests.
          This will install the demo data.
     """
-    project = tools.get_project()
-    workspace = tools.get_workspace(project)
+    _tests(tags=f"{(tags + ',') if tags else ''}-post_install", fast=False)
 
-    # Erase the database
-    print(f'Erasing {workspace.db_name}...')
-    db_clear(workspace.db_name)
 
-    rc_fullpath = project.relative(workspace.rc_file)
-    Rc(rc_fullpath).check_db_name(workspace.db_name)
-
-    # Running Odoo in the steps required to initialize the database
-    print('Starting tests with modules %s ...', ','.join(workspace.modules))
-    Odoo.start_tests(project.relative('odoo'),
-                     rc_fullpath,
-                     project.relative(workspace.venv_path),
-                     workspace.modules,
-                     f"{(tags + ',') if tags else ''}-post_install")
+@odev.command()
+def external_tests(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags")):
+    """
+         Init db and run Odoo's external tests.
+         This will install the demo data.
+    """
+    _tests(tags=f"{(tags + ',') if tags else ''}external", fast=True)
 
 
 @odev.command()
 def test(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags")):
     """
-        Initialize db and run all tests.
+        Initialize db and run all tests, but the external ones.
     """
     post_tests(tags)
     init_tests(tags)
 
 
 @odev.command()
-def db_init(workspace_name: Optional[str] = Argument(None, help=workspace_name_help),
+def db_init(workspace_name: Optional[str] = WorkspaceNameArgument(),
             dump_before: bool = False,
             dump_after: bool = False,
             demo: bool = False,

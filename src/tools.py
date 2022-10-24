@@ -7,6 +7,7 @@ from git import Git
 from templates import template_repos, main_repos, post_hook_template
 from repo import Repo
 from pathlib import Path
+
 import consts
 import os
 import sys
@@ -88,9 +89,9 @@ def get_workspace(project, workspace_name=None):
 
 
 def get_workspaces(project):
-    return sorted([
-        os.path.relpath(x, paths.workspaces()) for x in paths.workspaces().iterdir()
-    ])
+    if not paths.workspaces().exists():
+        return []
+    return sorted([os.path.relpath(x, paths.workspaces()) for x in paths.workspaces().iterdir()])
 
 
 def create_workspace(workspace_name, db_name, modules_csv, repos=None):

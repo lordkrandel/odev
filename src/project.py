@@ -63,9 +63,9 @@ class Project(JsonMixin):
 
 class Projects(JsonMixin, dict):
 
-    def __init__(self, projects):
+    def __init__(self, projects=None):
         super().__init__()
-        self.update(projects)
+        self.update(projects or {})
 
     @classmethod
     def from_json(cls, data):
@@ -102,11 +102,11 @@ class Projects(JsonMixin, dict):
 
         project_path = paths.config() / "workspaces" / digest
         if not project_path.is_dir():
-            project_path.mkdir()
+            paths.ensure(project_path)
         master_path = project_path / "master"
 
         if not master_path.is_dir():
-            master_path.mkdir()
+            paths.ensure(master_path)
 
         master_fullpath = master_path / "master.json"
         if not master_fullpath.exists():

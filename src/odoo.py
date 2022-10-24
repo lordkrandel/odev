@@ -48,3 +48,12 @@ class Odoo(External):
     def start_tests(cls, bin_path, rc_fullpath, venv_path, modules, tags=None):
         options = f'--test-enable --stop-after-init {f"--test-tags={tags}" if tags else ""}'
         cls.start(bin_path, rc_fullpath, venv_path, modules, options, pty=True, demo=True)
+
+    @classmethod
+    def l10n_tests(cls, bin_path, db_name, venv_path):
+        context = invoke.Context()
+        with context.cd(bin_path):
+            venv_script_path = os.path.join(venv_path, 'bin/activate')
+            command = f'source {venv_script_path} && {bin_path}/odoo/tests/test_module_operations.py -d {db_name} --standalone all_l10n'
+            print(command)
+            context.run(command, pty=True)
