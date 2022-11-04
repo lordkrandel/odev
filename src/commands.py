@@ -33,11 +33,11 @@ venv_path_help = "Virtualenv path"
 workspace_name_help = "Name of the workspace that holds the database information, omit to use current"
 
 
-def workspaces_yield(incomplete: str):
+def workspaces_yield(incomplete: str = ''):
     project = tools.get_project()
     if project:
-        return [(workspace_name, 'test') for workspace_name in tools.get_workspaces(project)
-                                         if workspace_name.startswith(incomplete)]
+        return [(workspace_name, workspace_name) for workspace_name in tools.get_workspaces(project)
+                                                 if workspace_name.startswith(incomplete)]
 
 
 def WorkspaceNameArgument(default=None, *args, **kwargs):
@@ -84,7 +84,7 @@ def workspaces():
     project = tools.get_project()
     if project:
         print(f"{project.name}::")
-    for workspace_name in workspaces_yield(project):
+    for workspace_name in dict(workspaces_yield()):
         print(f"    {workspace_name}")
 
 

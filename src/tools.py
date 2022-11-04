@@ -51,7 +51,6 @@ def get_project():
     if current_project:
         path = Path(current_project.path)
         if path != paths.current():
-            print(f"Current working directory is not project root {path}")
             os.chdir(path)
         current_project.path = path
     else:
