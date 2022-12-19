@@ -12,3 +12,6 @@ class Repo(JsonMixin):
         self.remote = remote
         self.branch = branch
         self.addons_folders = addons_folders
+
+    def __copy__(self):
+        return Repo(self.name, self.dev, self.origin, self.remote, self.branch, self.addons_folders)

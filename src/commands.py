@@ -5,8 +5,10 @@
 from pathlib import Path
 from typing import Optional
 
+import copy
 import os
 import sys
+import json
 import ast
 import itertools
 
@@ -17,39 +19,40 @@ import fileinput
 from rc import Rc
 from external import External
 from git import Git
+from gh import Gh
 from pgsql import PgSql
 from env import Environment
 from templates import template_repos, main_repos, post_hook_template
 from typer import Argument, Typer
-from typer.models import ArgumentInfo
 from workspace import Workspace
 
 from odoo import Odoo
+
+
+# Help strings -----------------------------------
 
 db_name_help = "Name of the database"
 project_name_help = "Name of the project (md5 of the path)"
 modules_csv_help = "CSV list of modules"
 venv_path_help = "Virtualenv path"
+repos_csv_help = "CSV list of repositories"
 workspace_name_help = "Name of the workspace that holds the database information, omit to use current"
 
 
-def workspaces_yield(incomplete: str = ''):
-    project = tools.get_project()
-    if project:
-        return [(workspace_name, workspace_name) for workspace_name in tools.get_workspaces(project)
-                                                 if workspace_name.startswith(incomplete)]
+# Gh ---------------------------------------------
+
+def ensure_gh():
+    if not Gh.exists():
+        print("GitHub CLI is not installed, this function is therefore disabled.")
+        print("Visit https://cli.github.com/manual/installation for more information.")
 
 
-def WorkspaceNameArgument(default=None, *args, **kwargs):
-    kwargs['help'] = workspace_name_help
-    kwargs['autocompletion'] = workspaces_yield
-    return Argument(default, *args, **kwargs)
-
+# Commands ---------------------------------------
 
 odev = Typer()
 
 
-# FILES --------------------------------------------------
+# Project ----------------------------------------
 
 @odev.command()
 def projects(edit: bool = False):
@@ -76,6 +79,32 @@ def project():
         print(f"{project.name}:: {project.to_json()}")
 
 
+def project_delete(project_name: Optional[str] = Argument(None, help=project_name_help)):
+    """
+        Delete a project.
+    """
+    project = tools.select_project("delete", project_name)
+    if not project or not tools.confirm("delete it"):
+        return
+    tools.delete_project(project.name)
+
+
+# Workspace ------------------------------------------------
+
+
+def workspaces_yield(incomplete: str = ''):
+    project = tools.get_project()
+    if project:
+        return [(workspace_name, workspace_name) for workspace_name in tools.get_workspaces(project)
+                                                 if workspace_name.startswith(incomplete)]
+
+
+def WorkspaceNameArgument(*args, default=None, **kwargs):
+    kwargs['help'] = workspace_name_help
+    kwargs['autocompletion'] = workspaces_yield
+    return Argument(default, *args, **kwargs)
+
+
 @odev.command()
 def workspaces():
     """
@@ -86,8 +115,6 @@ def workspaces():
         print(f"{project.name}::")
     for workspace_name in dict(workspaces_yield()):
         print(f"    {workspace_name}")
-
-
 
 
 @odev.command()
@@ -130,18 +157,55 @@ def workspace_set(workspace_name: Optional[str] = WorkspaceNameArgument()):
     print(f"Current workspace changed: {old_workspace.name} -> {workspace_name}")
 
 
-def delete_project(project_name: Optional[str] = Argument(None, help=project_name_help)):
-    """
-        Delete a project.
-    """
-    project = tools.select_project("delete", project_name)
-    if not project or not tools.confirm("delete it"):
+@odev.command()
+def workspace_from_pr(pr_number: int = Argument(None, help="PR number")):
+    ensure_gh()
+
+    main_owner, dev_owner = 'odoo', 'odoo-dev'
+    coros_dict = {name: Gh.get_pr_info(main_owner, name, pr_number) for name in template_repos}
+    result = tools.await_first_result(coros_dict)
+    if not result:
+        print(f"PR {pr_number} not found")
         return
-    tools.delete_project(project.name)
+
+    repo_name, info = result[0], json.loads(result[1])
+    branch = info['head']['ref']
+    title = info['title']
+    base_ref = info['base']['ref']
+
+    print(f"{repo_name}#{pr_number}   {title} ({branch})")
+
+    repos_to_search = [x for x in template_repos if x != repo_name]
+    coros_dict = {name: Gh.get_branch_info(dev_owner, name, branch) for name in repos_to_search}
+    result = tools.await_all_results(coros_dict)
+    repo_names = [repo_name] + [other_repo_name for other_repo_name in result]
+    print(f"Branch '{branch}' has been found in {repo_names}")
+
+    workspace = workspace_create(
+         workspace_name=branch,
+         db_name=None,
+         venv_path=None,
+         modules_csv=None,
+         repos_csv=",".join(repo_names))
+    if not workspace:
+        return
+
+    missing_repos = {missing_repo for missing_repo in main_repos if missing_repo not in repo_names}
+    for repo_name, repo in workspace.repos.items():
+        repo.remote = 'dev'
+        repo.branch = branch
+    for missing_repo in missing_repos:
+        new_repo = copy.copy(template_repos[missing_repo])
+        new_repo.remote = 'origin'
+        new_repo.branch = base_ref
+        workspace.repos[missing_repo] = new_repo
+    workspace.save_json(paths.workspace_file(workspace.name))
+
+    print(f"Workspace {workspace.name} has been created")
 
 
 @odev.command()
-def dupe_workspace(workspace_name: Optional[str] = WorkspaceNameArgument(),
+def workspace_dupe(workspace_name: Optional[str] = WorkspaceNameArgument(),
                    dest_workspace_name: Optional[str] = Argument(None, help="Destination name")):
     """
         Duplicate a workspace.
@@ -170,7 +234,7 @@ def dupe_workspace(workspace_name: Optional[str] = WorkspaceNameArgument(),
 
 
 @odev.command()
-def delete_workspace(workspace_name: Optional[str] = WorkspaceNameArgument()):
+def workspace_delete(workspace_name: Optional[str] = WorkspaceNameArgument()):
     """
         Delete a workspace.
     """
@@ -187,10 +251,11 @@ def delete_workspace(workspace_name: Optional[str] = WorkspaceNameArgument()):
 
 
 @odev.command()
-def create(workspace_name: str = Argument(None, help=workspace_name_help, autocompletion=workspaces_yield),
-           db_name: str = Argument(None, help=db_name_help),
-           modules_csv: str = Argument(None, help=modules_csv_help),
-           venv_path: Optional[str] = Argument(None, help=venv_path_help)):
+def workspace_create(workspace_name: Optional[str] = Argument(None, help=workspace_name_help, autocompletion=workspaces_yield),
+                     db_name: Optional[str] = Argument(None, help=db_name_help),
+                     modules_csv: Optional[str] = Argument(None, help=modules_csv_help),
+                     venv_path: Optional[str] = Argument(None, help=venv_path_help),
+                     repos_csv: Optional[str] = Argument(None, help=repos_csv_help)):
     """
         Create a new workspace from a series of selections.
     """
@@ -211,11 +276,15 @@ def create(workspace_name: str = Argument(None, help=workspace_name_help, autoco
         modules_csv = tools.input_text("What modules to use? (CSV)").strip()
     if not modules_csv:
         return
-    repos = checkout(workspace_name)
-    if not repos:
-        return
+    if not repos_csv:
+        repos = checkout(workspace_name)
+        if not repos:
+            return
+    else:
+        repos = {repo_name: template_repos[repo_name] for repo_name in repos_csv.split(',')}
+
     tools.create_workspace(workspace_name, db_name, modules_csv, repos)
-    tools.set_last_used(project.name, workspace_name)
+    return tools.get_workspace(project, workspace_name)
 
 
 # OPERATIONS ---------------------------------
@@ -345,7 +414,7 @@ def _setup_requisites(venv_path, added=None, reqs_file=None):
             env.context.run(f"pip install --upgrade {module}")
 
 
-# GIT ---------------------------------------------------
+# Git ---------------------------------------------------
 @odev.command()
 def status(extended: bool = True):
     """
@@ -415,10 +484,9 @@ def pull():
         print(f"Pulling {repo_name}...")
         Git.pull(project.relative(repo_name))
 
-
 @odev.command()
 def checkout(workspace_name: Optional[str] = WorkspaceNameArgument()):
-    """Masculine  (or Boy)  na
+    """
         Git-checkouts multiple repositories.
     """
     project = tools.get_project()
@@ -438,6 +506,19 @@ def checkout(workspace_name: Optional[str] = WorkspaceNameArgument()):
         Git.checkout(project.relative(repo_name), repo.branch)
 
     return repos
+
+@odev.command()
+def update(workspace_name: Optional[str] = WorkspaceNameArgument()):
+    """
+        Updates given workspace and reloads the current one.
+    """
+    project = tools.get_project()
+    last_used = project.last_used
+
+    repos = checkout(workspace_name)
+    for _repo_name, repo in repos.items():
+        Git.pull(project.relative(repo.name))
+    load(last_used)
 
 
 # FILES ------------------------------------------------------------
@@ -644,7 +725,7 @@ def db_init(workspace_name: Optional[str] = WorkspaceNameArgument(),
         Odoo.start(odoo_path, rc_fullpath, venv_path, None)
 
 
-# VENV -----------------------------------------------------------
+# Venv -----------------------------------------------------------
 
 @odev.command()
 def activate():
@@ -659,7 +740,7 @@ def activate():
     print(activate_path)
 
 
-# HUB ------------------------------------------------------------
+# Hub ------------------------------------------------------------
 
 @odev.command()
 def hub():
@@ -671,7 +752,7 @@ def hub():
     tools.open_hub(project, workspace)
 
 
-# LINT -----------------------------------------------------------
+# Lint -----------------------------------------------------------
 
 @odev.command()
 def lint():
@@ -692,7 +773,7 @@ def lint():
                      "/test_lint")
 
 
-# RUNBOT ---------------------------------------------------------
+# Runbot ---------------------------------------------------------
 
 @odev.command()
 def runbot():
@@ -704,11 +785,11 @@ def runbot():
     tools.open_runbot(project, workspace)
 
 
-# DEPS -----------------------------------------------------------
+# Deps -----------------------------------------------------------
 @odev.command()
 def deps(module):
     """
-        Find module dependancy order.
+        Find module dependancy order for a specific module.
     """
     project = tools.get_project()
     workspace = tools.get_workspace(project)

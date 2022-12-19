@@ -4,10 +4,12 @@
 from project import Projects
 from workspace import Workspace
 from git import Git
+from gh import Gh
 from templates import template_repos, main_repos, post_hook_template
 from repo import Repo
 from pathlib import Path
 
+import asyncio
 import consts
 import os
 import sys
@@ -202,7 +204,7 @@ def open_runbot(project, workspace):
     webbrowser.open(url)
 
 
-# Hub --------------------------------------------------
+# Github----------------------------------------------------
 
 def open_hub(project, workspace):
     base_url = "https://www.github.com"
@@ -211,6 +213,35 @@ def open_hub(project, workspace):
         url_repo_part = getattr(repo, repo.remote).split(':')[1]
         url = f"{base_url}/{url_repo_part}/tree/{repo.branch}"
         webbrowser.open(url)
+
+# Async ------------------------------------------------------
+
+def await_first_result(coros_dict):
+    async def await_first_result_async(coros_dict):
+        tasks = [asyncio.create_task(coro, name=name) for name, coro in coros_dict.items()]
+        while tasks:
+            done, unfinished = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                ret = task.result().join()
+                if ret.ok:
+                    for unfinished_task in unfinished:
+                        unfinished_task.cancel()
+                    await asyncio.wait(tasks)
+                    return task.get_name(), ret.stdout
+            tasks = unfinished
+    return asyncio.run(await_first_result_async(coros_dict))
+
+def await_all_results(coros_dict):
+    async def await_all_result_async(coros_dict):
+        results = {}
+        tasks = [asyncio.create_task(coro, name=name) for name, coro in coros_dict.items()]
+        done, dummy = await asyncio.wait(tasks)
+        for task in done:
+            ret = task.result().join()
+            if ret.ok:
+                results[task.get_name()] = ret.stdout
+        return results
+    return asyncio.run(await_all_result_async(coros_dict))
 
 
 # Questionary helpers --------------------------------------

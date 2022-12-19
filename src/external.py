@@ -2,6 +2,7 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import invoke
+import shutil
 
 
 class External():
@@ -15,3 +16,8 @@ class External():
     @classmethod
     def edit(cls, editor, target, pty=True, hide=None, echo=False):
         return cls.run(f"{editor} {target}", pty, hide, echo)
+
+    @classmethod
+    def which(cls, name):
+        """Check whether `name` is on PATH and marked as executable."""
+        return bool(shutil.which(name))
