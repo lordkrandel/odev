@@ -28,7 +28,7 @@ class Git(External):
         with context.cd(path):
             if extended:
                 print()
-                print("   %s %s" % (name.upper(), (45 - len(name)) * '-'))
+                print(f"   {name}/")
                 context.run('git log --format="   %s (%h)" -n 1')
                 return context.run('git -c color.status=always status -sb', pty=True)
             else:

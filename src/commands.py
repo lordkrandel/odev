@@ -45,6 +45,7 @@ def ensure_gh():
     if not Gh.exists():
         print("GitHub CLI is not installed, this function is therefore disabled.")
         print("Visit https://cli.github.com/manual/installation for more information.")
+        sys.exit(0)
 
 
 # Commands ---------------------------------------
@@ -424,6 +425,7 @@ def status(extended: bool = True):
     workspace = tools.get_workspace(project)
     if not workspace:
         return True
+    print(f"{project.path} - {workspace.name}")
     for name in workspace.repos:
         repo_path = Path(project.path) / name
         if not repo_path.is_dir():

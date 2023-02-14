@@ -12,16 +12,15 @@ class Gh(External):
         return External.which('gh')
 
     @classmethod
-    def make_url(cls, action, owner, repo_name, subaction, *args):
-        return f"gh api /{action}/{owner}/{repo_name}" \
-             + (f"/{subaction}/{'/'.join([str(arg) for arg in args])}" if subaction and args else '')
+    def make_url(cls, *args):
+        return "gh api /" + '/'.join([str(arg) for arg in args])
 
     @classmethod
-    async def get_pr_info(cls, owner, repo_name, pr_number):
+    async def get_pr_info(cls, owner, repo_name, pr_number, asynchronous=True):
         url = Gh.make_url('repos', owner, repo_name, 'pulls', pr_number)
-        return invoke.Context().run(url, warn=True, asynchronous=True)
+        return invoke.Context().run(url, warn=True, asynchronous=asynchronous)
 
     @classmethod
-    async def get_branch_info(cls, owner, repo_name, branch):
+    async def get_branch_info(cls, owner, repo_name, branch, asynchronous=True):
         url = Gh.make_url('repos', owner, repo_name, 'branches', branch)
-        return invoke.Context().run(url, warn=True, asynchronous=True)
+        return invoke.Context().run(url, warn=True, asynchronous=asynchronous)
