@@ -41,12 +41,12 @@ class Git(External):
             context.run('git stash -a')
 
     @classmethod
-    def checkout(cls, path, branch):
+    def checkout(cls, path, branch, options=None):
         context = invoke.Context()
         with context.cd(path):
             current_branch = cls.get_current_branch(path)
             if branch != current_branch:
-                context.run('git checkout %s' % branch)
+                context.run('git checkout %s %s' % (options or '', branch))
 
     @classmethod
     def get_current_branch(cls, path):

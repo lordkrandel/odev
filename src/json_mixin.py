@@ -3,6 +3,7 @@
 
 import json
 import os
+import re
 
 
 class JsonMixin():
@@ -13,6 +14,7 @@ class JsonMixin():
             return None
         with open(fullpath, "r", encoding="utf-8") as f:
             content = f.read() or "{}"
+        content = re.sub(r"#.*\n", "", content)
         data = json.loads(content)
         return cls.from_json(data) or cls()
 

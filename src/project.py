@@ -17,7 +17,7 @@ TEMPLATE = """{
     "post_hook_script": "post_hook.py",
     "venv_path": ".venv",
     "rc_file": ".odoorc",
-    "repos": {
+    "repos": {:
         "odoo": {
             "name": "odoo",
             "dev": "git@github.com:odoo-dev/odoo",

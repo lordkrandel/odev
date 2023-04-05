@@ -83,6 +83,11 @@ def select_project(action, project_name=None):
 
 # Workspace handling ------------------------------------------
 
+def cleanup_workspace_name(workspace_name):
+    if workspace_name and ":" in workspace_name:
+        return workspace_name.split(":")[1]
+    return workspace_name
+
 def get_workspace(project, workspace_name=None):
     if not workspace_name or workspace_name == 'last_used':
         workspace_name = project.last_used

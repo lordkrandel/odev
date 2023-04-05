@@ -23,7 +23,7 @@ from gh import Gh
 from pgsql import PgSql
 from env import Environment
 from templates import template_repos, main_repos, post_hook_template
-from typer import Argument, Typer
+from typer import Argument, Typer, Context
 from workspace import Workspace
 
 from odoo import Odoo
@@ -31,6 +31,7 @@ from odoo import Odoo
 
 # Help strings -----------------------------------
 
+extra_help = "Additional command line parameters"
 db_name_help = "Name of the database"
 project_name_help = "Name of the project (md5 of the path)"
 modules_csv_help = "CSV list of modules"
@@ -153,13 +154,19 @@ def workspace_set(workspace_name: Optional[str] = WorkspaceNameArgument()):
         workspace_name = tools.select_workspace("set as current", project)
         if not workspace_name:
             return
+    workspace_name = tools.cleanup_workspace_name(workspace_name)
 
     tools.set_last_used(project.name, workspace_name=workspace_name)
     print(f"Current workspace changed: {old_workspace.name} -> {workspace_name}")
 
 
 @odev.command()
-def workspace_from_pr(pr_number: int = Argument(None, help="PR number")):
+def workspace_from_pr(ctx: Context, pr_number: int = Argument(None, help="PR number"), load_workspace: bool = False):
+    """
+        Requires `gh` to be installed (Github CLI)
+        Creates a workspace from a PR number on odoo/odoo or odoo/enterprise.
+        If `load` is specified, it also loads generated workspace.
+    """
     ensure_gh()
 
     main_owner, dev_owner = 'odoo', 'odoo-dev'
@@ -183,6 +190,7 @@ def workspace_from_pr(pr_number: int = Argument(None, help="PR number")):
     print(f"Branch '{branch}' has been found in {repo_names}")
 
     workspace = workspace_create(
+         ctx,
          workspace_name=branch,
          db_name=None,
          venv_path=None,
@@ -201,13 +209,16 @@ def workspace_from_pr(pr_number: int = Argument(None, help="PR number")):
         new_repo.branch = base_ref
         workspace.repos[missing_repo] = new_repo
     workspace.save_json(paths.workspace_file(workspace.name))
-
     print(f"Workspace {workspace.name} has been created")
+
+    if load_workspace:
+        load(workspace.name)
 
 
 @odev.command()
 def workspace_dupe(workspace_name: Optional[str] = WorkspaceNameArgument(),
-                   dest_workspace_name: Optional[str] = Argument(None, help="Destination name")):
+                   dest_workspace_name: Optional[str] = Argument(None, help="Destination name"),
+                   _load: bool = False):
     """
         Duplicate a workspace.
     """
@@ -216,10 +227,12 @@ def workspace_dupe(workspace_name: Optional[str] = WorkspaceNameArgument(),
         workspace_name = tools.select_workspace("copy", project)
         if not workspace_name:
             return
+    workspace_name = tools.cleanup_workspace_name(workspace_name)
     if not dest_workspace_name:
         dest_workspace_name = (tools.input_text("What name for your workspace?") or '').strip()
         if not dest_workspace_name:
             return
+    dest_workspace_name = tools.cleanup_workspace_name(dest_workspace_name)
     sourcepath, destpath = paths.workspace(workspace_name), paths.workspace(dest_workspace_name)
     print(f'Copy {sourcepath} -> {destpath}')
     shutil.copytree(sourcepath, destpath)
@@ -230,9 +243,15 @@ def workspace_dupe(workspace_name: Optional[str] = WorkspaceNameArgument(),
     shutil.move(source_json_path, dest_json_path)
     with fileinput.FileInput(dest_json_path, inplace=True, backup='.bak') as f:
         for line in f:
-            print(line.replace(workspace_name, dest_workspace_name), end='')
-    tools.set_last_used(project.name, workspace_name=dest_workspace_name)
-
+            if workspace_name in line and "branch" in line:
+                print(f'{line.rstrip()} #" {dest_workspace_name}",')
+            elif workspace_name in line and ("name" in line or "dump" in line):
+                print(line.replace(workspace_name, dest_workspace_name), end="")
+            else:
+                print(line, end="")
+    workspace(dest_workspace_name, edit=True)
+    if _load:
+        load(dest_workspace_name)
 
 @odev.command()
 def workspace_delete(workspace_name: Optional[str] = WorkspaceNameArgument()):
@@ -244,6 +263,7 @@ def workspace_delete(workspace_name: Optional[str] = WorkspaceNameArgument()):
         workspace_name = tools.select_workspace("delete", project)
         if not workspace_name:
             return
+    workspace_name = tools.cleanup_workspace_name(workspace_name)
     if not tools.confirm(f"delete {paths.workspace(workspace_name)}"):
         return
     tools.delete_workspace(workspace_name)
@@ -252,20 +272,23 @@ def workspace_delete(workspace_name: Optional[str] = WorkspaceNameArgument()):
 
 
 @odev.command()
-def workspace_create(workspace_name: Optional[str] = Argument(None, help=workspace_name_help, autocompletion=workspaces_yield),
-                     db_name: Optional[str] = Argument(None, help=db_name_help),
-                     modules_csv: Optional[str] = Argument(None, help=modules_csv_help),
-                     venv_path: Optional[str] = Argument(None, help=venv_path_help),
-                     repos_csv: Optional[str] = Argument(None, help=repos_csv_help)):
+def workspace_create(
+        ctx: Context,
+        workspace_name: Optional[str] = Argument(None, help=workspace_name_help, autocompletion=workspaces_yield),
+        db_name: Optional[str] = Argument(None, help=db_name_help),
+        modules_csv: Optional[str] = Argument(None, help=modules_csv_help),
+        venv_path: Optional[str] = Argument(None, help=venv_path_help),
+        repos_csv: Optional[str] = Argument(None, help=repos_csv_help)
+    ):
     """
         Create a new workspace from a series of selections.
     """
-
     project = tools.get_project()
     if not workspace_name:
         workspace_name = (tools.input_text("What name for your workspace?") or '').strip()
     if not workspace_name:
         return
+    workspace_name = tools.cleanup_workspace_name(workspace_name)
     if workspace_name in tools.get_workspaces(project) + ['last_used']:
         print(f"Workspace {workspace_name} is empty or already exists")
         return
@@ -285,17 +308,41 @@ def workspace_create(workspace_name: Optional[str] = Argument(None, help=workspa
         repos = {repo_name: template_repos[repo_name] for repo_name in repos_csv.split(',')}
 
     tools.create_workspace(workspace_name, db_name, modules_csv, repos)
+
+    # If this function was used as a command, also checkout the branches
+    if ctx.command.name == 'workspace-create':
+        for repo_name, repo in repos.items():
+            print(f"Checking out {repo_name} {repo.remote}/{repo.branch}...")
+            Git.checkout(project.relative(repo_name), repo.branch)
+            print(f"Creating branch {repo_name} {workspace_name}...")
+            Git.checkout(project.relative(repo_name), workspace_name, options = '-b')
+        tools.set_last_used(project.name, workspace_name)
+        workspace_file = paths.workspace_file(workspace_name)
+        with fileinput.FileInput(workspace_file, inplace=True, backup='.bak') as f:
+            for line in f:
+                if repo.branch in line and "branch" in line:
+                    print(f'{line.rstrip()} # "{workspace_name}",')
+                elif 'remote' in line and not '"dev"' in line:
+                    print(f'{line.rstrip()} # "dev",')
+                else:
+                    print(line, end="")
+
     return tools.get_workspace(project, workspace_name)
 
 
 # OPERATIONS ---------------------------------
 
 @odev.command()
-def start(workspace_name: Optional[str] = WorkspaceNameArgument(), fast: bool = False, demo: bool = False):
+def start(workspace_name: Optional[str] = WorkspaceNameArgument(),
+          fast: bool = False,
+          demo: bool = False,
+          options: str = None):
     """
         Start Odoo and reinitialize the workspace's modules.
     """
+    options = options or ''
     project = tools.get_project()
+    workspace_name = tools.cleanup_workspace_name(workspace_name)
     workspace = tools.get_workspace(project, workspace_name)
     rc_fullpath = project.relative(workspace.rc_file)
     Rc(rc_fullpath).check_db_name(workspace.db_name)
@@ -303,6 +350,7 @@ def start(workspace_name: Optional[str] = WorkspaceNameArgument(), fast: bool = 
                rc_fullpath,
                project.relative(workspace.venv_path),
                workspace.modules if not fast else [],
+               options=options,
                pty=True,
                demo=demo)
 
@@ -317,6 +365,7 @@ def load(workspace_name: Optional[str] = WorkspaceNameArgument()):
         workspace_name = tools.select_workspace("load", project)
         if not workspace_name:
             return
+    workspace_name = tools.cleanup_workspace_name(workspace_name)
     if not status(extended=False):
         print("Cannot load, changes present.")
         return
@@ -684,6 +733,7 @@ def test(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags
 
 @odev.command()
 def db_init(workspace_name: Optional[str] = WorkspaceNameArgument(),
+            options: str = None,
             dump_before: bool = False,
             dump_after: bool = False,
             demo: bool = False,
@@ -691,6 +741,7 @@ def db_init(workspace_name: Optional[str] = WorkspaceNameArgument(),
     """
          Initialize the database, with modules and hook.
     """
+    options = options or ''
     project = tools.get_project()
     workspace = tools.get_workspace(project, workspace_name)
 
@@ -700,15 +751,24 @@ def db_init(workspace_name: Optional[str] = WorkspaceNameArgument(),
 
     # Running Odoo in the steps required to initialize the database
     print('Installing base module...')
-    options = ' --stop-after-init'
     rc_fullpath = project.relative(workspace.rc_file)
     venv_path = project.relative(workspace.venv_path)
     odoo_path = project.relative('odoo')
     Rc(rc_fullpath).check_db_name(workspace.db_name)
-    Odoo.start(odoo_path, rc_fullpath, venv_path, ['base'], options, demo=demo)
+    Odoo.start(odoo_path,
+               rc_fullpath,
+               venv_path,
+               modules=['base'],
+               options=f'{options} --stop-after-init',
+               demo=demo)
 
     print('Installing modules %s ...', ','.join(workspace.modules))
-    Odoo.start(odoo_path, rc_fullpath, venv_path, workspace.modules, options, demo=demo)
+    Odoo.start(odoo_path,
+               rc_fullpath,
+               venv_path,
+               modules=workspace.modules,
+               options=f'{options} --stop-after-init',
+               demo=demo)
 
     # Dump the db before the hook if the user has specifically asked for it
     if dump_before:
@@ -716,7 +776,13 @@ def db_init(workspace_name: Optional[str] = WorkspaceNameArgument(),
 
     print('Executing post_init_hook...')
     hook_path = paths.workspace(workspace.name) / workspace.post_hook_script
-    Odoo.start(odoo_path, rc_fullpath, venv_path, None, ' < ' + str(hook_path), 'shell', demo=demo)
+    Odoo.start(odoo_path,
+               rc_fullpath,
+               venv_path,
+               modules=None,
+               options=f'{options} --stop-after-init < {hook_path}',
+               mode='shell',
+               demo=demo)
 
     # Dump the db after the hook if the user has specifically asked for it
     if dump_after:
@@ -724,7 +790,7 @@ def db_init(workspace_name: Optional[str] = WorkspaceNameArgument(),
 
     if not stop:
         print('Starting Odoo...')
-        Odoo.start(odoo_path, rc_fullpath, venv_path, None)
+        Odoo.start(odoo_path, rc_fullpath, venv_path, modules=None, options=options)
 
 
 # Venv -----------------------------------------------------------
