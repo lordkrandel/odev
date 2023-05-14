@@ -85,10 +85,10 @@ class Git(External):
             context.run(f'git push {"-ff" if force else ""}')
 
     @classmethod
-    def pull(cls, path):
+    def pull(cls, path, remote, branch_name):
         context = invoke.Context()
         with context.cd(path):
-            context.run('git pull')
+            context.run(f'git pull {remote} {branch_name}')
 
     @classmethod
     def update_master_branch(cls, base_path, repo_name):
@@ -97,4 +97,4 @@ class Git(External):
         context = invoke.Context()
         with context.cd(path):
             context.run('git checkout master')
-        cls.pull(path)
+        cls.pull(path, 'origin', 'master')

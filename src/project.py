@@ -63,13 +63,18 @@ class Project(JsonMixin):
 
 class Projects(JsonMixin, dict):
 
-    def __init__(self, projects=None):
+    def __init__(self, projects=None, defaults=None):
         super().__init__()
+        self.defaults = defaults or {
+            "db_name": "odoodb"
+        }
         self.update(projects or {})
 
     @classmethod
     def from_json(cls, data):
-        return Projects({k: Project.from_json(v) for k, v in data.items()})
+        projects = {k: Project.from_json(v) for k, v in data.items() if k != "defaults"}
+        defaults = data.get("defaults")
+        return Projects(projects, defaults)
 
     def to_json(self):
         data = {k: v.__dict__ for k, v in self.items()}
@@ -91,7 +96,7 @@ class Projects(JsonMixin, dict):
         projects.save_json(paths.projects())
 
     @classmethod
-    def create_project(cls, path, digest, db_name="odoodb"):
+    def create_project(cls, path, digest, db_name=None):
         """
             Create a new project, path, and its 'master' workspace.
         """

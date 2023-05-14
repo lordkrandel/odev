@@ -189,10 +189,14 @@ def workspace_from_pr(ctx: Context, pr_number: int = Argument(None, help="PR num
     repo_names = [repo_name] + [other_repo_name for other_repo_name in result]
     print(f"Branch '{branch}' has been found in {repo_names}")
 
+    projects = tools.get_projects()
+    default_db_name = projects.defaults.get("db_name")
+    print(f"Default db name: '{default_db_name}'")
+
     workspace = workspace_create(
          ctx,
          workspace_name=branch,
-         db_name=None,
+         db_name=default_db_name,
          venv_path=None,
          modules_csv=None,
          repos_csv=",".join(repo_names))
@@ -533,7 +537,8 @@ def pull():
     workspace = tools.get_workspace(project)
     for repo_name in tools.select_repositories("pull", workspace, checked=main_repos):
         print(f"Pulling {repo_name}...")
-        Git.pull(project.relative(repo_name))
+        repo = workspace.repos[repo_name]
+        Git.pull(project.relative(repo_name), repo.remote, repo.branch)
 
 @odev.command()
 def checkout(workspace_name: Optional[str] = WorkspaceNameArgument()):
@@ -568,7 +573,7 @@ def update(workspace_name: Optional[str] = WorkspaceNameArgument()):
 
     repos = checkout(workspace_name)
     for _repo_name, repo in repos.items():
-        Git.pull(project.relative(repo.name))
+        Git.pull(project.relative(repo.name), repo.remote, repo.branch)
     load(last_used)
 
 
@@ -576,6 +581,7 @@ def update(workspace_name: Optional[str] = WorkspaceNameArgument()):
 
 @odev.command()
 def hook(workspace_name: Optional[str] = WorkspaceNameArgument(),
+         name: bool = False,
          edit: bool = False,
          run: bool = False):
     """
@@ -584,6 +590,9 @@ def hook(workspace_name: Optional[str] = WorkspaceNameArgument(),
     project = tools.get_project()
     workspace = tools.get_workspace(project, workspace_name)
     hook_fullpath = paths.workspace(workspace.name) / workspace.post_hook_script
+    if name:
+        print(hook_fullpath)
+        return
     if edit:
         External.edit(Git.get_editor(), hook_fullpath)
         return
@@ -645,7 +654,7 @@ def db_restore(workspace_name: Optional[str] = WorkspaceNameArgument()):
     project = tools.get_project()
     workspace = tools.get_workspace(project, workspace_name)
     dump_fullpath = paths.workspace(workspace.name) / workspace.db_dump_file
-    print("Restoring {workspace.db_name} <- {dump_fullpath}")
+    print(f"Restoring {workspace.db_name} <- {dump_fullpath}")
     PgSql.restore(workspace.db_name, dump_fullpath)
 
 @odev.command()
