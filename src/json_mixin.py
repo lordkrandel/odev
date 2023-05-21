@@ -2,7 +2,7 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import json
-import os
+from pathlib import Path
 import re
 
 
@@ -10,8 +10,8 @@ class JsonMixin():
 
     @classmethod
     def load_json(cls, fullpath):
-        if not os.path.exists(fullpath):
-            return None
+        if not fullpath or not Path(fullpath).exists():
+            return {}
         with open(fullpath, "r", encoding="utf-8") as f:
             content = f.read() or "{}"
         content = re.sub(r"#.*\n", "", content)

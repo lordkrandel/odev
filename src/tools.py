@@ -1,21 +1,19 @@
 # -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
-from project import Projects
+from project import Projects, Project, TEMPLATE
 from workspace import Workspace
 from git import Git
-from gh import Gh
+from odev import odev
 from templates import template_repos, main_repos, post_hook_template
 from repo import Repo
-from pathlib import Path
 
+import paths
 import asyncio
 import consts
-import os
-import sys
-import paths
 import questionary
 import shutil
+import sys
 import webbrowser
 
 custom_style = questionary.Style.from_dict({
@@ -35,51 +33,43 @@ def cat(fullpath, encoding="UTF-8"):
 
 # Project handling ---------------------------------------------
 
-def get_projects():
-    return Projects.load_json(paths.projects())
-
-
-def search_project():
-    path_hierarchy = [paths.current(), *paths.current().parents]
-    for path in path_hierarchy:
-        digest = paths.digest(path)
-        current_project = get_projects().get(digest)
-        if current_project:
-            return current_project
-    return None
-
-def get_project():
-    current_project = search_project()
-    if current_project:
-        path = Path(current_project.path)
-        if path != paths.current():
-            os.chdir(path)
-        current_project.path = path
-    else:
-        message = "Project not found, do you want to create a new one?"
-        if not questionary.confirm(message, qmark=consts.QMARK).ask():
-            sys.exit(1)
-        db_name = input_text("What db should it use?")
-        if not db_name:
-            sys.exit(1)
-        current_project = Projects.create_project(paths.current(), paths.current_digest(), db_name)
-        current_project.path = paths.current()
-    return current_project
-
-
-def delete_project(project_name):
-    Projects.delete_project(project_name)
-
-
 def select_project(action, project_name=None):
-    projects = get_projects()
     if not project_name:
-        choices = [questionary.Choice(project.path, value=project.name) for project in projects.values()]
+        choices = [questionary.Choice(project.path, value=project.name) for project in odev.projects.values()]
         project_name = select("project", action, choices, select_function=questionary.select)
         if not project_name:
             return []
-    return projects.get(project_name, [])
+    return odev.projects.get(project_name, [])
 
+def delete_project(project_name):
+    projects = Projects.load(odev.paths.projects)
+    if project_name not in projects:
+        raise ValueError(f"{project_name} is not a valid project")
+    projects.pop(project_name)
+    projects.save_json(odev.paths.projects)
+
+def create_project(path, digest, db_name=None):
+    """
+        Create a new project, path, and its 'master' workspace.
+    """
+    project = Project(digest, str(path), "master")
+    odev.projects[digest] = project
+    odev.projects.save_json(odev.paths.projects)
+
+    project_path = odev.paths.config / "workspaces" / digest(path)
+    if not project_path.is_dir():
+        paths.ensure(project_path)
+    master_path = project_path / "master"
+
+    if not master_path.is_dir():
+        paths.ensure(master_path)
+
+    master_fullpath = master_path / "master.json"
+    if not master_fullpath.exists():
+        with open(master_fullpath, "w", encoding="utf-8") as f:
+            f.write(TEMPLATE.replace("{{db_name}}", db_name))
+
+    return project
 
 # Workspace handling ------------------------------------------
 
@@ -87,18 +77,6 @@ def cleanup_workspace_name(workspace_name):
     if workspace_name and ":" in workspace_name:
         return workspace_name.split(":")[1]
     return workspace_name
-
-def get_workspace(project, workspace_name=None):
-    if not workspace_name or workspace_name == 'last_used':
-        workspace_name = project.last_used
-    return Workspace.load_json(paths.workspace_file(workspace_name))
-
-
-def get_workspaces(project):
-    if not paths.workspaces().exists():
-        return []
-    return sorted([os.path.relpath(x, paths.workspaces()) for x in paths.workspaces().iterdir()])
-
 
 def create_workspace(workspace_name, db_name, modules_csv, repos=None):
     repos = repos or select_repositories("checkout", workspace=None, checked=main_repos)
@@ -119,22 +97,16 @@ def create_workspace(workspace_name, db_name, modules_csv, repos=None):
     return repos
 
 
-def set_last_used(project_name, workspace_name=None):
-    if not workspace_name:
-        workspace_name = "master"
-    projects = Projects.load()
-    projects[project_name].last_used = workspace_name
-    projects.save()
-
-
 def delete_workspace(workspace_name):
-    shutil.rmtree(paths.workspace(workspace_name))
+    shutil.rmtree(odev.paths.workspace(workspace_name))
 
 
 def select_workspace(action, project):
-    workspaces = get_workspaces(project) + ['last_used']
+    workspaces = odev.workspaces + ['last']
     result = select("workspace", action, workspaces, questionary.autocomplete)
-    if result == 'last_used':
+    if result is None:
+        sys.exit(1)
+    if not result or result == 'last':
         result = project.last_used
     return result
 
@@ -150,22 +122,20 @@ def select_repos_and_branches(project, action, workspace=None):
 
 def select_repo_and_branch(project, action, workspace=None):
     repo = select_repository(project, action, workspace)
-    if repo:
+    if repo and not workspace:
         return select_branch(project, repo, action)
+    else:
+        return repo
 
 
 # Repositories -----------------------------------------------
 
 def select_repositories(action, workspace=None, checked=None):
+    repos = workspace.repos if workspace else template_repos
     if checked:
-        choices = [questionary.Choice(x, checked=(x in checked)) for x in template_repos]
-        repos = template_repos
-    elif workspace:
-        choices = workspace.repos
-        repos = workspace.repos if workspace else template_repos
+        choices = [questionary.Choice(x, checked=(x in checked)) for x in repos]
     else:
-        choices = template_repos.keys()
-        repos = template_repos
+        choices = repos
     return {repo_name: repos[repo_name] for repo_name in checkbox("repository", action, choices)}
 
 
@@ -213,7 +183,7 @@ def open_runbot(project, workspace):
 
 def open_hub(project, workspace):
     base_url = "https://www.github.com"
-    repo = select_repo_and_branch(project, "hub", workspace=None)
+    repo = select_repo_and_branch(project, "hub", workspace=odev.workspace)
     if repo:
         url_repo_part = getattr(repo, repo.remote).split(':')[1]
         url = f"{base_url}/{url_repo_part}/tree/{repo.branch}"
@@ -261,10 +231,13 @@ def checkbox(subject, action, choices):
 
 def select(subject, action, choices, select_function=questionary.rawselect, context=None):
     prefix = f"{context} > " if context else ''
-    return select_function(f"{prefix}Which {subject} do you want to {action}?",
+    result = select_function(f"{prefix}Which {subject} do you want to {action}?",
                            choices=choices,
                            style=custom_style,
-                           qmark=consts.QMARK).ask() or []
+                           qmark=consts.QMARK).ask()
+    if result is None:
+        sys.exit(1)
+    return result or []
 
 
 def confirm(action):

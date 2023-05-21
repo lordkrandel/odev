@@ -68,7 +68,7 @@ class Git(External):
         path = os.path.join(base_path, repo_name)
         context = invoke.Context()
         with context.cd(path):
-            print(f'{repo_name}:: {"-" * 80}')
+            print(f'{repo_name}:: {"-" * (80 - len(repo_name))}')
             context.run('git diff')
 
     @classmethod

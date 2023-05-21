@@ -3,9 +3,7 @@
 
 import json
 from json_mixin import JsonMixin
-import paths
 from pathlib import Path
-
 
 TEMPLATE = """{
     "name": "master",
@@ -63,59 +61,32 @@ class Project(JsonMixin):
 
 class Projects(JsonMixin, dict):
 
-    def __init__(self, projects=None, defaults=None):
+    def __init__(self, projects=None, defaults=None, path=None):
         super().__init__()
+        if path:
+            self.path = path
         self.defaults = defaults or {
-            "db_name": "odoodb"
+            "db_name": "odoodb",
+            "worktree": False
         }
         self.update(projects or {})
 
     @classmethod
     def from_json(cls, data):
-        projects = {k: Project.from_json(v) for k, v in data.items() if k != "defaults"}
+        projects = {k: Project.from_json(v) for k, v in data.items() if k not in ('path', "defaults")}
         defaults = data.get("defaults")
-        return Projects(projects, defaults)
+        path = data.get("path")
+        return Projects(projects, defaults, path)
 
     def to_json(self):
         data = {k: v.__dict__ for k, v in self.items()}
+        data['path'] = str(self.path)
+        data['defaults'] = self.defaults
         return json.dumps(data, indent=4)
 
     @classmethod
-    def load(cls):
-        return Projects.load_json(paths.projects())
+    def load(cls, path):
+        return Projects.load_json(path)
 
     def save(self):
-        return self.save_json(paths.projects())
-
-    @classmethod
-    def delete_project(cls, project_name):
-        projects = Projects.load()
-        if project_name not in projects:
-            raise ValueError(f"{project_name} is not a valid project")
-        projects.pop(project_name)
-        projects.save_json(paths.projects())
-
-    @classmethod
-    def create_project(cls, path, digest, db_name=None):
-        """
-            Create a new project, path, and its 'master' workspace.
-        """
-        projects = Projects.load()
-        project = Project(digest, str(path), "master")
-        projects[digest] = project
-        projects.save_json(paths.projects())
-
-        project_path = paths.config() / "workspaces" / digest
-        if not project_path.is_dir():
-            paths.ensure(project_path)
-        master_path = project_path / "master"
-
-        if not master_path.is_dir():
-            paths.ensure(master_path)
-
-        master_fullpath = master_path / "master.json"
-        if not master_fullpath.exists():
-            with open(master_fullpath, "w", encoding="utf-8") as f:
-                f.write(TEMPLATE.replace("{{db_name}}", db_name))
-
-        return project
+        return self.save_json(self.path)
