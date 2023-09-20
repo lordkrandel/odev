@@ -48,15 +48,16 @@ def delete_project(project_name):
     projects.pop(project_name)
     projects.save_json(odev.paths.projects)
 
-def create_project(path, digest, db_name=None):
+def create_project(path, db_name=None, worktree=False):
     """
         Create a new project, path, and its 'master' workspace.
     """
-    project = Project(digest, str(path), "master")
-    odev.projects[digest] = project
+    digest_current = paths.digest(path)
+    project = Project(digest_current, str(path), "master", worktree)
+    odev.projects[digest_current] = project
     odev.projects.save_json(odev.paths.projects)
 
-    project_path = odev.paths.config / "workspaces" / digest(path)
+    project_path = odev.paths.config / "workspaces" / digest_current
     if not project_path.is_dir():
         paths.ensure(project_path)
     master_path = project_path / "master"
@@ -64,12 +65,17 @@ def create_project(path, digest, db_name=None):
     if not master_path.is_dir():
         paths.ensure(master_path)
 
+    db_name = db_name or odev.projects.defaults["db_name"]
     master_fullpath = master_path / "master.json"
     if not master_fullpath.exists():
         with open(master_fullpath, "w", encoding="utf-8") as f:
             f.write(TEMPLATE.replace("{{db_name}}", db_name))
 
     return project
+
+def set_last_used(last_used, project=odev.project):
+    odev.projects[odev.project.name].last_used = last_used
+    odev.projects.save_json(odev.paths.projects)
 
 # Workspace handling ------------------------------------------
 
@@ -78,8 +84,8 @@ def cleanup_workspace_name(workspace_name):
         return workspace_name.split(":")[1]
     return workspace_name
 
-def create_workspace(workspace_name, db_name, modules_csv, repos=None):
-    repos = repos or select_repositories("checkout", workspace=None, checked=main_repos)
+def create_workspace(workspace_name, db_name, modules_csv, repos=None, worktree=False):
+    repos = repos or select_repositories("checkout", workspace=None, checked=main_repos, worktree=worktree)
     workspace = Workspace(
         workspace_name,
         db_name,
@@ -89,9 +95,9 @@ def create_workspace(workspace_name, db_name, modules_csv, repos=None):
         "post_hook.py",
         '.venv',
         '.odoorc')
-    workspace_path = paths.workspace(workspace_name)
+    workspace_path = odev.paths.workspace(workspace_name)
     paths.ensure(workspace_path)
-    workspace.save_json(paths.workspace_file(workspace_name))
+    workspace.save_json(odev.paths.workspace_file(workspace_name))
     with open(workspace_path / "post_hook.py", "w", encoding="utf-8") as post_hook_file:
         post_hook_file.write(post_hook_template)
     return repos
@@ -113,17 +119,17 @@ def select_workspace(action, project):
 
 # Repository and branches ------------------------------------
 
-def select_repos_and_branches(project, action, workspace=None):
+def select_repos_and_branches(project, action, workspace=None, worktree=False):
     repos = {}
     for repo_name, repo in select_repositories(action, workspace, checked=main_repos).items():
-        repos[repo_name] = select_branch(project, repo, action)
+        repos[repo_name] = select_branch(project, repo, action, worktree=worktree)
     return repos
 
 
-def select_repo_and_branch(project, action, workspace=None):
+def select_repo_and_branch(project, action, workspace=None, worktree=False):
     repo = select_repository(project, action, workspace)
     if repo and not workspace:
-        return select_branch(project, repo, action)
+        return select_branch(project, repo, action, worktree)
     else:
         return repo
 
@@ -157,10 +163,11 @@ def select_remote(action, remote=None, context=None):
 
 # Branches ----------------------------------------------------
 
-def select_branch(project, repo, action, choices=None, remote=None):
+def select_branch(project, repo, action, choices=None, remote=None, worktree=False):
     if not choices:
         remote = select_remote(action, remote, context=repo.name)
-        choices = Git.get_remote_branches(project.relative(repo.name), remote)
+        path = odev.paths.relative(repo.name) if not worktree else odev.paths.bare(repo)
+        choices = Git.get_remote_branches(path, remote, worktree)
     prefix = f"{repo.name} > " if not remote else f"{repo.name}/{remote} > "
     branch = questionary.autocomplete(
         f"{prefix}Which branch do you want to {action}?",

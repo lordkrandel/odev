@@ -38,7 +38,7 @@ template_repos = {
         []
     ),
     'upgrade': Repo(
-        'runbot',
+        'upgrade',
         'git@github.com:odoo/upgrade.git',
         'git@github.com:odoo/upgrade.git',
         'origin',

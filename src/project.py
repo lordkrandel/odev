@@ -3,7 +3,6 @@
 
 import json
 from json_mixin import JsonMixin
-from pathlib import Path
 
 TEMPLATE = """{
     "name": "master",
@@ -38,26 +37,25 @@ TEMPLATE = """{
 
 class Project(JsonMixin):
 
-    def __init__(self, name, path, last_used):
+    def __init__(self, name, path, last_used, worktree):
         self.name = name
         self.path = path
+        self.worktree = worktree
         self.last_used = last_used
 
     @classmethod
     def from_json(cls, data):
         return Project(data.get('name'),
                        str(data.get('path')),
-                       data.get('last_used'))
+                       data.get('last_used'),
+                       data.get('worktree', False))
 
     def to_json(self):
         data = {'name': self.name,
                 'path': str(self.path),
-                'last_used': self.last_used}
+                'last_used': self.last_used,
+                'worktree': self.worktree}
         return json.dumps(data, indent=4)
-
-    def relative(self, path):
-        return Path(self.path) / path
-
 
 class Projects(JsonMixin, dict):
 

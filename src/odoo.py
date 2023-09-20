@@ -11,7 +11,7 @@ import invoke
 class Odoo(External):
 
     @classmethod
-    def banner(cls, bin_path, rc_fullpath, venv_path, modules, options, mode, demo):
+    def banner(cls, bin_path, rc_fullpath, venv_path, modules, options, mode, demo, stop):
         rc = Rc(rc_fullpath)
         base_path = Path(bin_path).absolute().parent
         print(f"{80 * '-'}")
@@ -26,6 +26,8 @@ class Odoo(External):
             print(f"    Options: {options}")
         if mode:
             print(f"    Mode: {mode}")
+        if stop:
+            print(f"    Stop: {stop}")
         print(f"    Demo data: {demo}")
         print(f"{80 * '-'}")
 
@@ -34,13 +36,14 @@ class Odoo(External):
         return not demo and "--without-demo=WITHOUT_DEMO" or ""
 
     @classmethod
-    def start(cls, bin_path, rc_fullpath, venv_path, modules, options='', mode='', pty=False, demo=False, in_stream=None):
-        cls.banner(bin_path, rc_fullpath, venv_path, modules, options, mode, demo)
+    def start(cls, bin_path, rc_fullpath, venv_path, modules, options='', mode='', pty=False, demo=False, stop=False, in_stream=None):
+        cls.banner(bin_path, rc_fullpath, venv_path, modules, options, mode, demo, stop)
         modules = ("-i %s" % ",".join(modules)) if modules else ''
+        stop = "--stop-after-init" if stop else ''
         context = invoke.Context()
         with context.cd(bin_path):
             venv_script_path = os.path.join(venv_path, 'bin/activate')
-            command = f'source {venv_script_path} && {bin_path}/odoo-bin {mode} {cls.get_demo_option(demo)} -c {rc_fullpath} {modules} {options}'
+            command = f'source {venv_script_path} && {bin_path}/odoo-bin {mode} {cls.get_demo_option(demo)} -c {rc_fullpath} {modules} {stop} {options}'
             print(command)
             context.run(command, pty=pty, in_stream=in_stream)
 
