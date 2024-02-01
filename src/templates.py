@@ -52,11 +52,18 @@ template_repos = {
         'origin',
         'master',
         []
+    ),
+    'tutorials': Repo(
+        'tutorials',
+        'git@github.com:odoo/tutorials.git',
+        'git@github.com:odoo/tutorials.git',
+        'origin',
+        '17.0',
+        ['.']
     )
 }
 
-post_hook_template = """#!/usr/bin/env python3
-# Part of Odoo. See LICENSE file for full copyright and licensing details.
+post_hook_template = """# Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 self = locals().get('self', object())
 """

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import json
@@ -6,13 +5,13 @@ from pathlib import Path
 import re
 
 
-class JsonMixin():
+class JsonMixin:
 
     @classmethod
     def load_json(cls, fullpath):
         if not fullpath or not Path(fullpath).exists():
             return {}
-        with open(fullpath, "r", encoding="utf-8") as f:
+        with open(fullpath, encoding="utf-8") as f:
             content = f.read() or "{}"
         content = re.sub(r"#.*\n", "", content)
         data = json.loads(content)

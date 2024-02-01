@@ -1,8 +1,7 @@
-# -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import json
-import os
+from pathlib import Path
 from repo import Repo
 from json_mixin import JsonMixin
 
@@ -49,6 +48,6 @@ class Workspace(JsonMixin):
 
     def set_current(self, project_path):
         """ Set the workspace as current """
-        fullpath = os.path.join(project_path, 'last_used_workspace')
+        fullpath = Path(project_path) / 'last_used_workspace'
         with open(fullpath, "w", encoding="utf-8") as f:
             return f.write(self.name)

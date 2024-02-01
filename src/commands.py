@@ -2,14 +2,17 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 # ruff: noqa: T201, UP007
+# pylint: disable=bad-builtin
 
 from __future__ import annotations
 from typing import Optional
 from pathlib import Path
 
 import copy
+import datetime
 import sys
 import json
+import re
 import ast
 import itertools
 
@@ -19,6 +22,7 @@ import tools
 import fileinput
 import click
 from typer import Argument, Context
+from invoke import UnexpectedExit
 
 from rc import Rc
 from external import External
@@ -119,6 +123,12 @@ def set_target_workspace(workspace_name: str):
     else:
         workspace_name = tools.cleanup_workspace_name(workspace_name)
     odev.workspace = Workspace.load_json(odev.paths.workspace_file(workspace_name))
+    if odev.workspace:
+        for repo_key, repo in odev.workspace.repos.items():
+            if str(odev.paths.starting).startswith(str(odev.paths.relative('') / repo_key)):
+                odev.repo = repo
+                break
+
     return workspace_name
 
 def workspaces_yield(incomplete: Optional[str] = None):
@@ -174,6 +184,30 @@ def workspace_set(workspace_name: Optional[str] = WorkspaceNameArgument(default=
     print(f"Current workspace changed: {old_workspace_name} -> {odev.workspace.name}")
 
 @odev.command()
+def reviews(ctx: Context, owner: Optional[str] = Argument(None, help="Github user")):
+    """
+        Requires `gh` to be installed (Github CLI)
+        Lists the current reviews you're in charge with.
+    """
+    ensure_gh()
+    coros_dict = {name: Gh.get_pr_list(owner, name) for name in template_repos}
+    result = tools.await_all_results(coros_dict)
+    if not result:
+        print("Cannot download PR list")
+        return
+    prs_data = {k: json.loads(v) for k, v in result.items() if v.strip() != '[]'}
+    new_data = []
+    for _repo_name, prs in prs_data.items():
+        for pr_data in prs:
+            for date_field in ('createdAt', 'updatedAt'):
+                pr_data[date_field[:-2] + '_days'] = (datetime.date.today() - datetime.datetime.fromisoformat(pr_data[date_field]).date()).days
+            new_data.append(pr_data)
+    for pr_data in sorted(new_data, key=lambda x: x['created_days']):
+        match = re.search('odoo/(.*)/pull', pr_data['url'])
+        pr_data['repo'] = match and match.group(1) or ''
+        print("{repo:>10}/{baseRefName:<10} {number:<7} {created_days:>5} {updated_days:>5}   {title:70.70} {url:50.50}".format(**pr_data))
+
+@odev.command()
 def workspace_from_pr(ctx: Context, pr_number: int = Argument(None, help="PR number"), load_workspace: bool = False):
     """
         Requires `gh` to be installed (Github CLI)
@@ -199,16 +233,18 @@ def workspace_from_pr(ctx: Context, pr_number: int = Argument(None, help="PR num
     repos_to_search = [x for x in template_repos if x != repo_name]
     coros_dict = {name: Gh.get_branch_info(dev_owner, name, branch) for name in repos_to_search}
     result = tools.await_all_results(coros_dict)
-    repo_names = [repo_name] + (other_repo_name for other_repo_name in result)
+    repo_names = [repo_name] + list(result)
     print(f"Branch '{branch}' has been found in {repo_names}")
 
-    default_db_name = odev.projects.defaults.get("db_name")
-    print(f"Default db name: '{default_db_name}'")
+    if odev.worktree:
+        db_name = branch
+    elif not (db_name := (tools.input_text("What database name to use?") or '').strip()):
+        return
 
     workspace = workspace_create(
          ctx,
          workspace_name=branch,
-         db_name=default_db_name,
+         db_name=db_name,
          venv_path=None,
          modules_csv=None,
          repos_csv=",".join(repo_names))
@@ -266,6 +302,19 @@ def workspace_dupe(workspace_name: Optional[str] = WorkspaceNameArgument(default
         load(dest_workspace_name)
 
 @odev.command()
+def workspace_move(workspace_name: Optional[str] = WorkspaceNameArgument(default=None),
+                   dest_workspace_name: Optional[str] = Argument(None, help="Destination name")):
+    """
+        Renames a workspace.
+    """
+    if not dest_workspace_name:
+        dest_workspace_name = (tools.input_text("What destination for your workspace?") or '').strip()
+
+    if not tools.confirm(f"Rename {workspace_name} to {dest_workspace_name}"):
+        return
+    tools.move_workspace(workspace_name, dest_workspace_name)
+
+@odev.command()
 def workspace_delete(workspace_name: Optional[str] = WorkspaceNameArgument(default=None)):
     """
         Delete a workspace.
@@ -306,7 +355,7 @@ def workspace_create(
     if not modules_csv:
         return
     if not repos_csv:
-        repos = checkout(workspace_name)
+        repos = checkout(workspace_name, force_create=True)
         if not repos:
             return
     else:
@@ -317,7 +366,7 @@ def workspace_create(
     # If this function was used as a command, also checkout the branches
     if ctx.command.name in ('workspace-from-pr', 'workspace-create'):
         for _repo_name, repo in repos.items():
-            _checkout_repo(repo, odev.worktree)
+            _checkout_repo(repo, odev.worktree, force_create=True)
 
         set_target_workspace(workspace_name)
         tools.set_last_used(workspace_name)
@@ -562,26 +611,33 @@ def pull(workspace_name: Optional[str] = WorkspaceNameArgument()):
         repo = odev.workspace.repos[repo_name]
         Git.pull(odev.paths.repo(repo), repo.remote, repo.branch)
 
-def _checkout_repo(repo, worktree=False):
+def _checkout_repo(repo, worktree=False, force_create=False):
     if worktree:
         bare_path = odev.paths.bare(repo)
         if not bare_path.exists():
             print(f"Creating worktree {repo.branch} in {bare_path}...")
             Git.worktree_add(repo.branch, bare_path)
     path = odev.paths.repo(repo)
-    print(f"Fetching {repo.name} {repo.remote}/{repo.branch}...")
-    Git.fetch(path, repo.name, repo.remote, repo.branch)
+    try:
+        print(f"Fetching {repo.name} {repo.remote}/{repo.branch}...")
+        Git.fetch(path, repo.name, repo.remote, repo.branch)
+    except UnexpectedExit:
+        if not force_create:
+            raise
+        print(f"Creating {repo.name} {repo.remote}/{repo.branch}...")
+        Git.checkout(path, repo.branch, options="-B")
     print(f"Checking out {repo.name} {repo.remote}/{repo.branch}...")
     Git.checkout(path, repo.branch)
 
 @odev.command()
-def checkout(workspace_name: Optional[str] = WorkspaceNameArgument(default=None)):
+def checkout(workspace_name: Optional[str] = WorkspaceNameArgument(default=None),
+             force_create: bool = False):
     """
         Git-checkouts multiple repositories.
     """
     repos = (odev.workspace and odev.workspace.repos) or tools.select_repos_and_branches(odev.project, "checkout", odev.workspace, odev.worktree)
     for _repo_name, repo in repos.items():
-        _checkout_repo(repo, odev.worktree)
+        _checkout_repo(repo, odev.worktree, force_create=force_create)
     return repos
 
 @odev.command()
@@ -600,31 +656,36 @@ def update(ctx: Context, workspace_name: Optional[str] = WorkspaceNameArgument()
 # FILES ------------------------------------------------------------
 
 @odev.command()
-def hook(workspace_name: Optional[str] = WorkspaceNameArgument(),
-         name: bool = False,
-         edit: bool = False,
-         run: bool = False):
+def hook(subcommand: Optional[str] = Argument(help="Action to be taken (show, name, edit, run, copy)", default="show"),
+         workspace_name: Optional[str] = WorkspaceNameArgument(),
+         copy_dest: Optional[str] = Argument(help="Copy's workspace destination", default=None)):
     """
         Display or edit the post_hook python file.
     """
-    hook_fullpath = odev.paths.workspace(workspace_name) / Path(odev.workspace.post_hook_script)
-    if name:
-        print(hook_fullpath)
-        return
-    if edit:
-        External.edit(Git.get_editor(), hook_fullpath)
-        return
-    if run:
+    def hook_fullpath(workspace=None):
+        workspace = workspace or odev.workspace
+        return odev.paths.workspace(workspace.name) / Path(workspace.post_hook_script)
+    subcommand = subcommand.lower()
+    if subcommand == 'name':
+        print(hook_fullpath())
+    elif subcommand == 'edit':
+        External.edit(Git.get_editor(), hook_fullpath())
+    elif subcommand == 'run':
         rc_fullpath = odev.paths.relative(odev.workspace.rc_file)
         Rc(rc_fullpath).check_db_name(odev.workspace.db_name)
         odoo_repo = odev.workspace.repos['odoo']
         Odoo.start(odev.paths.repo(odoo_repo),
                    rc_fullpath,
                    odev.paths.relative(odev.workspace.venv_path),
-                   None, ' < ' + str(hook_fullpath),
+                   None, ' < ' + str(hook_fullpath()),
                    'shell')
-        return
-    tools.cat(hook_fullpath)
+    elif subcommand == 'copy':
+        src_fullpath = hook_fullpath(odev.workspace)
+        dest_fullpath = hook_fullpath(Workspace.load_json(odev.paths.workspace_file(copy_dest)))
+        print(f"cp {src_fullpath} {dest_fullpath}")
+        shutil.copyfile(src_fullpath, dest_fullpath)
+    else:
+        tools.cat(hook_fullpath())
 
 @odev.command()
 def rc(workspace_name: Optional[str] = WorkspaceNameArgument(), edit: bool = False):
@@ -665,6 +726,48 @@ def db_restore(workspace_name: Optional[str] = WorkspaceNameArgument()):
     print(f"Restoring {odev.workspace.db_name} <- {dump_fullpath}")
     PgSql.restore(odev.workspace.db_name, dump_fullpath)
 
+
+@odev.command()
+def upgrade(repo_name: str = Argument(help="Repository to be upgraded"),
+            old_remote: str = Argument(help="Origin of the branch to be upgraded"),
+            old_branch: str = Argument(help="Branch to be upgraded"),
+            old_modules_csv: Optional[str] = Argument(None, help="Modules to be loaded before upgrade"),
+            workspace_name: Optional[str] = WorkspaceNameArgument()):
+    """
+        Run upgrade from a user-specified old version to the one specified in the Workspace
+    """
+
+    if not status(extended=False):
+        print("Cannot upgrade, changes present.")
+        return
+
+    new_repo = odev.workspace.repos[repo_name]
+    new_modules = odev.workspace.modules
+    old_modules = old_modules_csv.split(',') if old_modules_csv else new_modules
+    old_repo = copy.copy(new_repo)
+    old_repo.remote = old_remote
+    old_repo.branch = old_branch
+    rc_fullpath = odev.paths.relative(odev.workspace.rc_file)
+    venv_path = odev.paths.relative(odev.workspace.venv_path)
+    odoo_path = odev.paths.repo(odev.workspace.repos['odoo'])
+    upgrade_path = odev.paths.repo(odev.workspace.repos['upgrade'])
+
+    print("Upgrading::")
+    print(f"    repo: {repo_name}")
+    print(f"    upgrading branch: {old_repo.remote}/{old_repo.branch} -> {new_repo.remote}/{new_repo.branch}")
+    print(f"    modules: {old_modules}{' -> ' + str(new_modules) if new_modules != str(old_modules) else ''}")
+
+    _checkout_repo(old_repo)
+    db_init(workspace_name, modules_csv=','.join(old_modules), demo=True, stop=True, post_init_hook=False)
+
+    _checkout_repo(new_repo)
+    Git.clean(odoo_path)
+    Odoo.start(odoo_path,
+               rc_fullpath,
+               venv_path,
+               modules=new_modules,
+               options=f'--upgrade-path={upgrade_path}/migrations -u all',
+               demo=True)
 
 @odev.command()
 def l10n_tests(fast: bool = False, workspace_name: Optional[str] = WorkspaceNameArgument()):
@@ -742,10 +845,12 @@ def test(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags
 @odev.command()
 def db_init(workspace_name: Optional[str] = WorkspaceNameArgument(),
             options: Optional[str] = None,
+            modules_csv: Optional[str] = None,
             dump_before: bool = False,
             dump_after: bool = False,
             demo: bool = False,
-            stop: bool = False):
+            stop: bool = False,
+            post_init_hook: bool = True):
     """
          Initialize the database, with modules and hook.
     """
@@ -771,11 +876,12 @@ def db_init(workspace_name: Optional[str] = WorkspaceNameArgument(),
                demo=demo,
                stop=True)
 
-    print('Installing modules %s ...', ','.join(odev.workspace.modules))
+    modules = modules_csv and modules_csv.split(',') or odev.workspace.modules
+    print('Installing modules %s ...', ','.join(modules))
     Odoo.start(odoo_path,
                rc_fullpath,
                venv_path,
-               modules=odev.workspace.modules,
+               modules=modules,
                options=options,
                demo=demo,
                stop=True)
@@ -784,16 +890,17 @@ def db_init(workspace_name: Optional[str] = WorkspaceNameArgument(),
     if dump_before:
         db_dump(workspace_name)
 
-    print('Executing post_init_hook...')
-    hook_path = odev.paths.workspace(odev.workspace.name) / odev.workspace.post_hook_script
-    Odoo.start(odoo_path,
-               rc_fullpath,
-               venv_path,
-               modules=None,
-               options=f'{options} < {hook_path}',
-               mode='shell',
-               demo=demo,
-               stop=True)
+    if post_init_hook:
+        print('Executing post_init_hook...')
+        hook_path = odev.paths.workspace(odev.workspace.name) / odev.workspace.post_hook_script
+        Odoo.start(odoo_path,
+                   rc_fullpath,
+                   venv_path,
+                   modules=None,
+                   options=f'{options} < {hook_path}',
+                   mode='shell',
+                   demo=demo,
+                   stop=True)
 
     # Dump the db after the hook if the user has specifically asked for it
     if dump_after:
@@ -815,11 +922,11 @@ def activate_path(workspace_name: Optional[str] = WorkspaceNameArgument()):
 # Hub ------------------------------------------------------------
 
 @odev.command()
-def hub(workspace_name: Optional[str] = WorkspaceNameArgument()):
+def hub(workspace_name: Optional[str] = WorkspaceNameArgument(), select: bool=False):
     """
         Open Github in a browser on a branch of a given repo.
     """
-    tools.open_hub(odev.project, odev.workspace)
+    tools.open_hub(odev.project, repo=not select and odev.repo)
 
 # Lint -----------------------------------------------------------
 

@@ -12,6 +12,7 @@ class Odev(Typer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.workspace = None
+        self.repo = None
 
         self.setup_fixed_paths()
         self.projects = Projects.load_json(self.paths.projects)
@@ -26,7 +27,7 @@ class Odev(Typer):
         return odev.project.worktree
 
     def setup_fixed_paths(self):
-        class Paths():
+        class Paths:
             pass
         self.paths = Paths()
         self.paths.config = Path.home() / '.config' / consts.APPNAME
@@ -36,9 +37,9 @@ class Odev(Typer):
 
     def setup_current_project(self):
         self.project = None
-        for digest in parent_digests(self.paths.starting):
-            if digest in self.projects:
-                self.project = self.projects.get(digest)
+        for parent_digest in parent_digests(self.paths.starting):
+            if parent_digest in self.projects:
+                self.project = self.projects.get(parent_digest)
                 break
         return self.project
 
@@ -50,6 +51,5 @@ class Odev(Typer):
         self.paths.workspaces = self.paths.config / 'workspaces' / digest(self.paths.project)
         self.paths.workspace = lambda name: self.paths.workspaces / name
         self.paths.workspace_file = lambda name: self.paths.workspace(name) / Path(f"{name}.json")
-
 
 odev = Odev()

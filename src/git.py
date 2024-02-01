@@ -9,6 +9,12 @@ import re
 class Git(External):
 
     @classmethod
+    def clean(cls, folder='.'):
+        context = invoke.Context()
+        with context.cd(folder):
+            context.run('git clean -xdf')
+
+    @classmethod
     def get_editor(cls):
         return invoke.Context().run('git config --get core.editor', pty=True, hide=True).stdout.strip()
 
@@ -68,7 +74,7 @@ class Git(External):
                 return re.findall('refs/heads/(.*)\n', entries)
             else:
                 len_remote = len(remote) + 1 if remote else 0
-                return [x.strip()[len_remote:] for x in entries]
+                return [x.strip()[len_remote:] for x in entries.split('\n')]
 
     @classmethod
     def diff(cls, path, repo_name):

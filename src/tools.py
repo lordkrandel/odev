@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
+from pathlib import Path
 from project import Projects, Project, TEMPLATE
 from workspace import Workspace
 from git import Git
@@ -103,6 +104,21 @@ def create_workspace(workspace_name, db_name, modules_csv, repos=None, worktree=
     return repos
 
 
+def move_workspace(workspace_name, dest_workspace_name):
+    path = odev.paths.workspace_file(workspace_name)
+    dest_path = odev.paths.workspace(workspace_name) / Path(f"{dest_workspace_name}.json")
+    workspace = Workspace.load_json(path)
+    shutil.move(path, dest_path)
+
+    workspace.db_dump_file.replace(workspace_name, dest_workspace_name)
+    workspace.name = dest_workspace_name
+    workspace.save_json(dest_path)
+
+    path = odev.paths.workspace(workspace_name)
+    dest_path = odev.paths.workspace(dest_workspace_name)
+    shutil.move(path, dest_path)
+
+
 def delete_workspace(workspace_name):
     shutil.rmtree(odev.paths.workspace(workspace_name))
 
@@ -129,7 +145,7 @@ def select_repos_and_branches(project, action, workspace=None, worktree=False):
 def select_repo_and_branch(project, action, workspace=None, worktree=False):
     repo = select_repository(project, action, workspace)
     if repo and not workspace:
-        return select_branch(project, repo, action, worktree)
+        return select_branch(project, repo, action, worktree=worktree)
     else:
         return repo
 
@@ -188,13 +204,13 @@ def open_runbot(project, workspace):
 
 # Github----------------------------------------------------
 
-def open_hub(project, workspace):
+def open_hub(project, repo=None):
     base_url = "https://www.github.com"
-    repo = select_repo_and_branch(project, "hub", workspace=odev.workspace)
-    if repo:
-        url_repo_part = getattr(repo, repo.remote).split(':')[1]
-        url = f"{base_url}/{url_repo_part}/tree/{repo.branch}"
-        webbrowser.open(url)
+    if not repo:
+        repo = select_repo_and_branch(project, "hub")
+    url_repo_part = getattr(repo, repo.remote).split(':')[1]
+    url = f"{base_url}/{url_repo_part}/tree/{repo.branch}"
+    webbrowser.open(url)
 
 # Async ------------------------------------------------------
 
