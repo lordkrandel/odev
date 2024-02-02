@@ -1,9 +1,6 @@
 #!/usr/bin/python3
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
-# ruff: noqa: T201, UP007
-# pylint: disable=bad-builtin
-
 from __future__ import annotations
 from typing import Optional
 from pathlib import Path
@@ -218,12 +215,24 @@ def workspace_from_pr(ctx: Context, pr_number: int = Argument(None, help="PR num
 
     main_owner, dev_owner = 'odoo', 'odoo-dev'
     coros_dict = {name: Gh.get_pr_info(main_owner, name, pr_number) for name in template_repos}
-    result = tools.await_first_result(coros_dict)
+    result = tools.await_all_results(coros_dict)
     if not result:
         print(f"PR {pr_number} not found")
         return
 
-    repo_name, info = result[0], json.loads(result[1])
+    gh_result = {repo_name: json.loads(json_data) for repo_name, json_data in result.items()}
+    if len(gh_result) > 1:
+        print()
+        print(f"PR #{pr_number} can be found in more than one repository:")
+        print()
+        for repo_name, gh_data in gh_result.items():
+            updated_at = datetime.datetime.fromisoformat(gh_data['updated_at'])
+            print(f">> odoo/{repo_name:<12} {tools.date_to_string(updated_at):<20} {gh_data['title']}")
+        print()
+        repo = tools.select_repository("download from", odev.workspace, repo_names=list(result))
+        gh_result = {k: v for k, v in gh_result.items() if k == repo.name}
+
+    repo_name, info = next(iter(gh_result.items()))
     branch = info['head']['ref']
     title = info['title']
     base_ref = info['base']['ref']

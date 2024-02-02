@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 from repo import Repo
+
 
 main_repos = ('odoo', 'enterprise')
 template_repos = {

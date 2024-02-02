@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 from pathlib import Path
@@ -6,12 +5,13 @@ from project import Projects, Project, TEMPLATE
 from workspace import Workspace
 from git import Git
 from odev import odev
+import paths
 from templates import template_repos, main_repos, post_hook_template
 from repo import Repo
 
-import paths
 import asyncio
 import consts
+from datetime import datetime
 import questionary
 import shutil
 import sys
@@ -23,10 +23,16 @@ custom_style = questionary.Style.from_dict({
 })
 
 
-# Files handling -------------------------------------------
+# Pure tools ---------------------------------------------------
+
+def date_to_string(d):
+    return datetime.strftime(d, "%H:%M:%S %d/%m/%Y")
+
+
+# Files handling -----------------------------------------------
 
 def cat(fullpath, encoding="UTF-8"):
-    with open(fullpath, "r", encoding=encoding) as f:
+    with open(fullpath, encoding=encoding) as f:
         lines = f.readlines()
     for line in lines:
         print(line.rstrip())
@@ -45,7 +51,8 @@ def select_project(action, project_name=None):
 def delete_project(project_name):
     projects = Projects.load(odev.paths.projects)
     if project_name not in projects:
-        raise ValueError(f"{project_name} is not a valid project")
+        msg = f"{project_name} is not a valid project"
+        raise ValueError(msg)
     projects.pop(project_name)
     projects.save_json(odev.paths.projects)
 
@@ -86,7 +93,7 @@ def cleanup_workspace_name(workspace_name):
     return workspace_name
 
 def create_workspace(workspace_name, db_name, modules_csv, repos=None, worktree=False):
-    repos = repos or select_repositories("checkout", workspace=None, checked=main_repos, worktree=worktree)
+    repos = repos or select_repositories("checkout", workspace=None, checked=main_repos)
     workspace = Workspace(
         workspace_name,
         db_name,
@@ -143,7 +150,7 @@ def select_repos_and_branches(project, action, workspace=None, worktree=False):
 
 
 def select_repo_and_branch(project, action, workspace=None, worktree=False):
-    repo = select_repository(project, action, workspace)
+    repo = select_repository(action, workspace)
     if repo and not workspace:
         return select_branch(project, repo, action, worktree=worktree)
     else:
@@ -161,11 +168,16 @@ def select_repositories(action, workspace=None, checked=None):
     return {repo_name: repos[repo_name] for repo_name in checkbox("repository", action, choices)}
 
 
-def select_repository(project, action, workspace=None):
-    repos = workspace.repos if workspace else template_repos
-    repo_name = select("repository", action, repos, select_function=questionary.select)
+def select_repository(action, workspace=None, repo_names=None):
+    all_repos = workspace.repos if workspace else template_repos
+    if not repo_names:
+        repo_choices = all_repos
+    else:
+        repo_choices = {repo_name: repo for repo_name, repo in all_repos.items() if repo_name in repo_names}
+
+    repo_name = select("repository", action, repo_choices, select_function=questionary.select)
     if repo_name:
-        repo = repos[repo_name]
+        repo = repo_choices[repo_name]
         return Repo(repo.name, repo.dev, repo.origin, repo.remote, repo.branch, repo.addons_folders)
 
 

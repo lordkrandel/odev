@@ -5,6 +5,7 @@ from pathlib import Path
 from repo import Repo
 from json_mixin import JsonMixin
 
+
 class Workspace(JsonMixin):
 
     def __init__(self, name, db_name, repos, modules, db_dump_file,
@@ -22,10 +23,7 @@ class Workspace(JsonMixin):
     def from_json(cls, data):
         repos = {}
         for repo_name, repo in data.get('repos', {}).items():
-            try:
-                repos[repo_name] = Repo.from_json(repo)
-            except Exception as e:
-                print(f"Cannot read repository {data.get('name')}, {e}")
+            repos[repo_name] = Repo.from_json(repo)
 
         return Workspace(
             data.get('name', ''),

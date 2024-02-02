@@ -1,10 +1,10 @@
-# -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import invoke
 from external import External
-import os
+from pathlib import Path
 import re
+
 
 class Git(External):
 
@@ -103,7 +103,7 @@ class Git(External):
 
     @classmethod
     def update_master_branch(cls, base_path, repo_name):
-        path = os.path.join(base_path, repo_name)
+        path = Path(base_path) / repo_name
         cls.fetch(base_path, repo_name, 'origin', 'master')
         context = invoke.Context()
         with context.cd(path):

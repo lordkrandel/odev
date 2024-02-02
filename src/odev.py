@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import consts
@@ -7,6 +5,7 @@ from pathlib import Path
 from paths import digest, parent_digests
 from project import Projects
 from typer import Typer
+
 
 class Odev(Typer):
     def __init__(self, *args, **kwargs):

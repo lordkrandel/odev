@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import venv
 import invoke
-import os.path
+from pathlib import Path
 
-class Environment():
+
+class Environment:
 
     def __init__(self, path):
         self.path = path
@@ -15,7 +15,7 @@ class Environment():
 
     def __enter__(self):
         self.context = invoke.Context()
-        activate_path = os.path.join(self.path, "bin", "activate")
+        activate_path = Path(self.path) / "bin" / "activate"
         self.prefix = self.context.prefix(f'source {activate_path}')
         return self.prefix.__enter__()
 

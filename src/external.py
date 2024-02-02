@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import invoke
 import shutil
 
 
-class External():
+class External:
 
     @classmethod
     def run(cls, command, pty=True, hide=None, echo=True):

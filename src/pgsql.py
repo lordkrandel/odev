@@ -1,7 +1,6 @@
-# -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
-import os
+from pathlib import Path
 from paths import ensure
 from external import External
 
@@ -10,12 +9,12 @@ class PgSql(External):
 
     @classmethod
     def dump(cls, db_name, dump_fullpath):
-        ensure(os.path.dirname(dump_fullpath))
+        ensure(Path(dump_fullpath))
         return cls.run(f'pg_dump -F p -b -f {dump_fullpath} {db_name}')
 
     @classmethod
     def restore(cls, db_name, dump_fullpath):
-        if not os.path.exists(dump_fullpath):
+        if not Path(dump_fullpath):
             raise ValueError("Dump file %s not found." % dump_fullpath)
         cls.erase(db_name)
         return cls.run(f'psql -q -d {db_name} -f {dump_fullpath} > /dev/null')

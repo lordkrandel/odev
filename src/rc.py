@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import configparser
 from pathlib import Path
 
 
-class Rc():
+class Rc:
 
     def __init__(self, rc_fullpath):
         config = configparser.ConfigParser()

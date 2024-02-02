@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 from hashlib import md5
 from pathlib import Path
 from functools import lru_cache
+
 
 def ensure(path):
     path = Path(path)

@@ -1,11 +1,9 @@
-# -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
-from external import External
-from rc import Rc
-from pathlib import Path
-import os
 import invoke
+from external import External
+from pathlib import Path
+from rc import Rc
 
 
 class Odoo(External):
@@ -42,7 +40,7 @@ class Odoo(External):
         stop = "--stop-after-init" if stop else ''
         context = invoke.Context()
         with context.cd(bin_path):
-            venv_script_path = os.path.join(venv_path, 'bin/activate')
+            venv_script_path = Path(venv_path) / 'bin' / 'activate'
             command = f'source {venv_script_path} && {bin_path}/odoo-bin {mode} {cls.get_demo_option(demo)} -c {rc_fullpath} {modules} {stop} {options}'
             print(command)
             context.run(command, pty=pty, in_stream=in_stream)
@@ -56,7 +54,7 @@ class Odoo(External):
     def l10n_tests(cls, bin_path, db_name, venv_path):
         context = invoke.Context()
         with context.cd(bin_path):
-            venv_script_path = os.path.join(venv_path, 'bin/activate')
+            venv_script_path = Path(venv_path) / 'bin' / 'activate'
             command = f'source {venv_script_path} && {bin_path}/odoo/tests/test_module_operations.py -d {db_name} --standalone all_l10n'
             print(command)
             context.run(command, pty=True)
