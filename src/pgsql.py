@@ -9,7 +9,7 @@ class PgSql(External):
 
     @classmethod
     def dump(cls, db_name, dump_fullpath):
-        ensure(Path(dump_fullpath))
+        ensure(Path(dump_fullpath).parent)
         return cls.run(f'pg_dump -F p -b -f {dump_fullpath} {db_name}')
 
     @classmethod
