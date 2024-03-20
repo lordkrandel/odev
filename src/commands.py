@@ -67,7 +67,7 @@ def projects(edit: bool = False):
         return
     for name in sorted(odev.projects, key=lambda x: odev.projects[x].path):
         project = odev.projects[name]
-        print(f"{project.path:40}  {project.name}  {odev.paths.workspaces / project.name}")
+        print(f"{project.path:40}  {project.name}  {odev.paths.config / 'workspaces' / project.name}")
 
 @odev.command()
 def project():
@@ -197,12 +197,13 @@ def reviews(ctx: Context, owner: Optional[str] = Argument(None, help="Github use
     for _repo_name, prs in prs_data.items():
         for pr_data in prs:
             for date_field in ('createdAt', 'updatedAt'):
-                pr_data[date_field[:-2] + '_days'] = (datetime.date.today() - datetime.datetime.fromisoformat(pr_data[date_field]).date()).days
+                pr_date = datetime.datetime.fromisoformat(pr_data[date_field]).date()
+                pr_data[date_field[:-2] + '_days'] = (datetime.date.today() - pr_date).days
             new_data.append(pr_data)
     for pr_data in sorted(new_data, key=lambda x: x['created_days']):
         match = re.search('odoo/(.*)/pull', pr_data['url'])
         pr_data['repo'] = match and match.group(1) or ''
-        print("{repo:>10}/{baseRefName:<10} {number:<7} {created_days:>5} {updated_days:>5}   {title:70.70} {url:50.50}".format(**pr_data))
+        print("{repo:>10} {baseRefName:<10} {number:<7} {created_days:>5} {updated_days:>5}   {title:70.70} {url:50.50}".format(**pr_data))
 
 @odev.command()
 def workspace_from_pr(ctx: Context, pr_number: int = Argument(None, help="PR number"), load_workspace: bool = False):
@@ -690,7 +691,11 @@ def hook(subcommand: Optional[str] = Argument(help="Action to be taken (show, na
                    'shell')
     elif subcommand == 'copy':
         src_fullpath = hook_fullpath(odev.workspace)
-        dest_fullpath = hook_fullpath(Workspace.load_json(odev.paths.workspace_file(copy_dest)))
+        if (dest_workspace_path := Path(odev.paths.workspace_file(copy_dest))) and dest_workspace_path.exists():
+            dest_fullpath = hook_fullpath(Workspace.load_json(dest_workspace_path))
+        else:
+            dest_fullpath = odev.paths.hook_file(copy_dest)
+            paths.ensure(dest_fullpath.parent)
         print(f"cp {src_fullpath} {dest_fullpath}")
         shutil.copyfile(src_fullpath, dest_fullpath)
     else:
@@ -744,6 +749,7 @@ def upgrade(repo_name: str = Argument(help="Repository to be upgraded"),
             workspace_name: Optional[str] = WorkspaceNameArgument()):
     """
         Run upgrade from a user-specified old version to the one specified in the Workspace
+        ex. ocli upgrade odoo origin 15.0 account_account,l10n_it_edi,l10n_it_edi_pa
     """
 
     if not status(extended=False):

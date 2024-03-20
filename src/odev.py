@@ -50,5 +50,6 @@ class Odev(Typer):
         self.paths.workspaces = self.paths.config / 'workspaces' / digest(self.paths.project)
         self.paths.workspace = lambda name: self.paths.workspaces / name
         self.paths.workspace_file = lambda name: self.paths.workspace(name) / Path(f"{name}.json")
+        self.paths.hook_file = lambda name: self.paths.workspace(name) / Path("post_hook.py")
 
 odev = Odev()
