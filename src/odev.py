@@ -21,10 +21,6 @@ class Odev(Typer):
             self.setup_variable_paths()
             self.workspaces = sorted([x.name for x in self.paths.workspaces.iterdir()])
 
-    @property
-    def worktree(self):
-        return odev.project.worktree
-
     def setup_fixed_paths(self):
         class Paths:
             pass
@@ -45,8 +41,7 @@ class Odev(Typer):
     def setup_variable_paths(self):
         self.paths.project = Path(self.project.path)
         self.paths.relative = lambda x: self.paths.project / x
-        self.paths.repo = lambda repo: self.paths.relative(repo.name if not self.worktree else Path(repo.name) / repo.branch)
-        self.paths.bare = lambda repo: self.paths.relative(Path(repo.name) / '.bare')
+        self.paths.repo = lambda repo: self.paths.relative(repo.name)
         self.paths.workspaces = self.paths.config / 'workspaces' / digest(self.paths.project)
         self.paths.workspace = lambda name: self.paths.workspaces / name
         self.paths.workspace_file = lambda name: self.paths.workspace(name) / Path(f"{name}.json")

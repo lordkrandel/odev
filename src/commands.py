@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
+# ruff: noqa: T201
 
 from __future__ import annotations
 from typing import Optional
@@ -88,8 +89,7 @@ def project_delete(project_name: Optional[str] = Argument(None, help=project_nam
 
 @odev.command()
 def project_create(project_path: Optional[str] = Argument(None, help=project_path_help),
-                   db_name: Optional[str] = Argument(None, help=db_name_help),
-                   worktree: bool = False):
+                   db_name: Optional[str] = Argument(None, help=db_name_help)):
     """
         Create a project for the current directory
     """
@@ -100,10 +100,9 @@ def project_create(project_path: Optional[str] = Argument(None, help=project_pat
 
     if odev.projects:
         db_name = db_name or odev.projects.defaults['db_name']
-        worktree = worktree or odev.projects.defaults['worktree']
 
     print(f"Creating project in folder {project_path}")
-    return tools.create_project(project_path, db_name, worktree)
+    return tools.create_project(project_path, db_name)
 
 # Workspace ------------------------------------------------
 
@@ -246,9 +245,7 @@ def workspace_from_pr(ctx: Context, pr_number: int = Argument(None, help="PR num
     repo_names = [repo_name] + list(result)
     print(f"Branch '{branch}' has been found in {repo_names}")
 
-    if odev.worktree:
-        db_name = branch
-    elif not (db_name := (tools.input_text("What database name to use?") or '').strip()):
+    if not (db_name := (tools.input_text("What database name to use?") or '').strip()):
         return
 
     workspace = workspace_create(
@@ -356,9 +353,7 @@ def workspace_create(
         print(f"Workspace {workspace_name} is empty or already exists")
         return
     if not db_name:
-        if odev.worktree:
-            db_name = workspace_name
-        elif not (db_name := (tools.input_text("What database name to use?") or '').strip()):
+        if not (db_name := (tools.input_text("What database name to use?") or '').strip()):
             return
     if not modules_csv:
         modules_csv = tools.input_text("What modules to use? (CSV)").strip()
@@ -371,12 +366,12 @@ def workspace_create(
     else:
         repos = {repo_name: template_repos[repo_name] for repo_name in repos_csv.split(',')}
 
-    tools.create_workspace(workspace_name, db_name, modules_csv, repos, odev.worktree)
+    tools.create_workspace(workspace_name, db_name, modules_csv, repos)
 
     # If this function was used as a command, also checkout the branches
     if ctx.command.name in ('workspace-from-pr', 'workspace-create'):
         for _repo_name, repo in repos.items():
-            _checkout_repo(repo, odev.worktree, force_create=True)
+            _checkout_repo(repo, force_create=True)
 
         set_target_workspace(workspace_name)
         tools.set_last_used(workspace_name)
@@ -448,8 +443,7 @@ def shell(interface: Optional[str] = Argument("python", help="Type of shell inte
                None, options=interface, mode='shell', pty=True)
 
 @odev.command()
-def setup(db_name: Optional[str] = Argument(None, help="Odoo database name"),
-          worktree: bool = False):
+def setup(db_name: Optional[str] = Argument(None, help="Odoo database name")):
     """
         Sets up the main folder, with repos and venv.
     """
@@ -459,15 +453,14 @@ def setup(db_name: Optional[str] = Argument(None, help="Odoo database name"),
     paths.ensure(odev.paths.config)
     if not odev.projects:
         paths.ensure(odev.paths.projects)
-        odev.projects = Projects(defaults={"worktree": worktree, "db_name": db_name or 'odoodb'})
+        odev.projects = Projects(defaults={"db_name": db_name or 'odoodb'})
 
     if not odev.project:
-        odev.project = project_create(project_path, db_name, worktree)
+        odev.project = project_create(project_path, db_name)
         odev.setup_current_project()
         odev.setup_variable_paths()
         odev.workspaces = sorted([x.name for x in odev.paths.workspaces.iterdir()])
     else:
-        odev.project.worktree = worktree
         odev.project.db_name = db_name
     odev.projects[odev.project.name] = odev.project
     odev.projects.save()
@@ -478,29 +471,15 @@ def setup(db_name: Optional[str] = Argument(None, help="Odoo database name"),
     for repo_name, repo in tools.select_repositories("setup", None, checked=main_repos).items():
         path = odev.paths.repo(repo)
 
-        if odev.project.worktree:
-            clone_path = odev.paths.bare(repo)
-            if not odev.paths.project.exists():
-                print(f"creating path {odev.paths.project}...")
-                paths.ensure(odev.paths.project)
-        else:
-            clone_path = path
+        clone_path = path
 
         if not clone_path.exists():
             print(f"creating path {clone_path}...")
             paths.ensure(clone_path)
 
-        if odev.project.worktree:
-            clone_gitfile_path = odev.paths.relative(Path(repo.name) / '.git')
-            if not clone_gitfile_path.exists():
-                with Path.open(clone_gitfile_path, "w", encoding="utf-8") as f:
-                    f.write("gitdir: ./.bare")
-
-        bare = bool(odev.project.worktree)
-
         if not list(clone_path.glob("*")):
             print(f"cloning {repo_name} in {clone_path}...")
-            Git.clone(repo.origin, repo.branch, clone_path, bare=bare)
+            Git.clone(repo.origin, repo.branch, clone_path)
             Git.add_remote('dev', repo.dev, clone_path)
 
         setup_requisites(odev.paths.relative('.venv'),
@@ -532,7 +511,7 @@ def setup(db_name: Optional[str] = Argument(None, help="Odoo database name"),
 
 @odev.command()
 def setup_requisites(
-        path = Argument(help='Base path for the virtual env'),
+        path=Argument(help='Base path for the virtual env'),
         added_csv: Optional[str] = Argument(help="CSV of the additional python modules to be installed", default=None),
         reqs_file_csv: Optional[str] = Argument(help="CSV of the requirements modules files", default=None)
     ):
@@ -621,12 +600,7 @@ def pull(workspace_name: Optional[str] = WorkspaceNameArgument()):
         repo = odev.workspace.repos[repo_name]
         Git.pull(odev.paths.repo(repo), repo.remote, repo.branch)
 
-def _checkout_repo(repo, worktree=False, force_create=False):
-    if worktree:
-        bare_path = odev.paths.bare(repo)
-        if not bare_path.exists():
-            print(f"Creating worktree {repo.branch} in {bare_path}...")
-            Git.worktree_add(repo.branch, bare_path)
+def _checkout_repo(repo, force_create=False):
     path = odev.paths.repo(repo)
     try:
         print(f"Fetching {repo.name} {repo.remote}/{repo.branch}...")
@@ -645,9 +619,9 @@ def checkout(workspace_name: Optional[str] = WorkspaceNameArgument(default=None)
     """
         Git-checkouts multiple repositories.
     """
-    repos = (odev.workspace and odev.workspace.repos) or tools.select_repos_and_branches(odev.project, "checkout", odev.workspace, odev.worktree)
+    repos = (odev.workspace and odev.workspace.repos) or tools.select_repos_and_branches(odev.project, "checkout", odev.workspace)
     for _repo_name, repo in repos.items():
-        _checkout_repo(repo, odev.worktree, force_create=force_create)
+        _checkout_repo(repo, force_create=force_create)
     return repos
 
 @odev.command()

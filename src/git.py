@@ -1,4 +1,5 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
+# ruff: noqa: T201
 
 import invoke
 from external import External
@@ -19,9 +20,8 @@ class Git(External):
         return invoke.Context().run('git config --get core.editor', pty=True, hide=True).stdout.strip()
 
     @classmethod
-    def clone(cls, repository, branch, directory, bare=False):
-        bare_option = '--bare' if bare else ''
-        cls.run(f'git clone {bare_option} --branch {branch} --single-branch {repository} {directory}')
+    def clone(cls, repository, branch, directory):
+        cls.run(f'git clone --branch {branch} --single-branch {repository} {directory}')
 
     @classmethod
     def add_remote(cls, name, url, path):

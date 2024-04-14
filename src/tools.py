@@ -56,12 +56,12 @@ def delete_project(project_name):
     projects.pop(project_name)
     projects.save_json(odev.paths.projects)
 
-def create_project(path, db_name=None, worktree=False):
+def create_project(path, db_name=None):
     """
         Create a new project, path, and its 'master' workspace.
     """
     digest_current = paths.digest(path)
-    project = Project(digest_current, str(path), "master", worktree)
+    project = Project(digest_current, str(path), "master")
     odev.projects[digest_current] = project
     odev.projects.save_json(odev.paths.projects)
 
@@ -92,7 +92,7 @@ def cleanup_workspace_name(workspace_name):
         return workspace_name.split(":")[1]
     return workspace_name
 
-def create_workspace(workspace_name, db_name, modules_csv, repos=None, worktree=False):
+def create_workspace(workspace_name, db_name, modules_csv, repos=None):
     repos = repos or select_repositories("checkout", workspace=None, checked=main_repos)
     workspace = Workspace(
         workspace_name,
@@ -142,17 +142,17 @@ def select_workspace(action, project):
 
 # Repository and branches ------------------------------------
 
-def select_repos_and_branches(project, action, workspace=None, worktree=False):
+def select_repos_and_branches(project, action, workspace=None):
     repos = {}
     for repo_name, repo in select_repositories(action, workspace, checked=main_repos).items():
-        repos[repo_name] = select_branch(project, repo, action, worktree=worktree)
+        repos[repo_name] = select_branch(project, repo, action)
     return repos
 
 
-def select_repo_and_branch(project, action, workspace=None, worktree=False):
+def select_repo_and_branch(project, action, workspace=None):
     repo = select_repository(action, workspace)
     if repo and not workspace:
-        return select_branch(project, repo, action, worktree=worktree)
+        return select_branch(project, repo, action)
     else:
         return repo
 
@@ -191,11 +191,11 @@ def select_remote(action, remote=None, context=None):
 
 # Branches ----------------------------------------------------
 
-def select_branch(project, repo, action, choices=None, remote=None, worktree=False):
+def select_branch(project, repo, action, choices=None, remote=None):
     if not choices:
         remote = select_remote(action, remote, context=repo.name)
-        path = odev.paths.relative(repo.name) if not worktree else odev.paths.bare(repo)
-        choices = Git.get_remote_branches(path, remote, worktree)
+        path = odev.paths.bare(repo)
+        choices = Git.get_remote_branches(path, remote)
     prefix = f"{repo.name} > " if not remote else f"{repo.name}/{remote} > "
     branch = questionary.autocomplete(
         f"{prefix}Which branch do you want to {action}?",
