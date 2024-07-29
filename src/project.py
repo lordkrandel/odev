@@ -1,6 +1,8 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import json
+from paths import ensure
+from pathlib import Path
 from json_mixin import JsonMixin
 
 TEMPLATE = """{
@@ -39,7 +41,7 @@ class Project(JsonMixin):
     def __init__(self, name, path, last_used):
         self.name = name
         self.path = path
-        self.last_used = last_used
+        self.last_used = last_used or 'master'
 
     @classmethod
     def from_json(cls, data):
@@ -53,12 +55,11 @@ class Project(JsonMixin):
                 'last_used': self.last_used}
         return json.dumps(data, indent=4)
 
+
 class Projects(JsonMixin, dict):
 
     def __init__(self, projects=None, defaults=None, path=None):
-        super().__init__()
-        if path:
-            self.path = path
+        self.path = Path(path)
         self.defaults = defaults or {
             "db_name": "odoodb",
         }
@@ -79,7 +80,8 @@ class Projects(JsonMixin, dict):
 
     @classmethod
     def load(cls, path):
-        return Projects.load_json(path)
+        return Projects.load_json(path) or Projects(path=path)
 
     def save(self):
+        ensure(self.path.parent)
         return self.save_json(self.path)

@@ -15,7 +15,7 @@ class JsonMixin:
             content = f.read() or "{}"
         content = re.sub(r"#.*\n", "", content)
         data = json.loads(content)
-        return cls.from_json(data) or cls()
+        return cls.from_json(data)
 
     @classmethod
     def from_json(cls, data):

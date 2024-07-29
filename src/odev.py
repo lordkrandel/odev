@@ -14,8 +14,7 @@ class Odev(Typer):
         self.repo = None
 
         self.setup_fixed_paths()
-        self.projects = Projects.load_json(self.paths.projects)
-        self.projects.path = self.paths.projects
+        self.projects = Projects.load(self.paths.projects)
         self.projects.save()
         if self.setup_current_project():
             self.setup_variable_paths()

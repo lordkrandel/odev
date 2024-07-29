@@ -30,7 +30,6 @@ from pgsql import PgSql
 from odev import odev
 from env import Environment
 from templates import template_repos, main_repos, post_hook_template
-from project import Projects
 from workspace import Workspace
 
 from odoo import Odoo
@@ -449,12 +448,6 @@ def setup(db_name: Optional[str] = Argument(None, help="Odoo database name")):
     """
 
     project_path = Path().absolute()
-
-    paths.ensure(odev.paths.config)
-    if not odev.projects:
-        paths.ensure(odev.paths.projects)
-        odev.projects = Projects(defaults={"db_name": db_name or 'odoodb'})
-
     if not odev.project:
         odev.project = project_create(project_path, db_name)
         odev.setup_current_project()
