@@ -3,37 +3,36 @@
 # ruff: noqa: T201
 
 from __future__ import annotations
-from typing import Optional
-from pathlib import Path
 
+import ast
 import copy
 import datetime
-import sys
-import json
-import re
-import ast
-import itertools
-
-import paths
-import shutil
-import tools
 import fileinput
-import click
-from typer import Argument, Context
-from invoke import UnexpectedExit
+import itertools
+import json
+import operator
+import re
+import shutil
+import sys
+from pathlib import Path
+from typing import Optional
 
-from rc import Rc
-from external import External
-from git import Git
-from gh import Gh
-from pgsql import PgSql
-from odev import odev
+import click
+import paths
+import tools
 from env import Environment
-from templates import template_repos, main_repos, post_hook_template
+from external import External
+from gh import Gh
+from git import Git
+from invoke import UnexpectedExit
+from odev import odev
+from pgsql import PgSql
+from rc import Rc
+from templates import main_repos, post_hook_template, template_repos
+from typer import Argument, Context
 from workspace import Workspace
 
 from odoo import Odoo
-
 
 # Help strings -----------------------------------
 
@@ -46,6 +45,7 @@ venv_path_help = "Virtualenv path"
 repos_csv_help = "CSV list of repositories"
 workspace_name_help = "Name of the workspace that holds the database information, omit to use current"
 
+
 # Gh ---------------------------------------------
 
 def ensure_gh():
@@ -53,6 +53,7 @@ def ensure_gh():
         print("GitHub CLI is not installed, this function is therefore disabled.")
         print("Visit https://cli.github.com/manual/installation for more information.")
         sys.exit(0)
+
 
 # Project ----------------------------------------
 
@@ -69,12 +70,14 @@ def projects(edit: bool = False):
         project = odev.projects[name]
         print(f"{project.path:40}  {project.name}  {odev.paths.config / 'workspaces' / project.name}")
 
+
 @odev.command()
 def project():
     """
         Display project data for the current folder.
     """
     print(f"{odev.project.name}:: {odev.project.to_json()}")
+
 
 @odev.command()
 def project_delete(project_name: Optional[str] = Argument(None, help=project_name_help)):
@@ -85,6 +88,7 @@ def project_delete(project_name: Optional[str] = Argument(None, help=project_nam
     if not project or not tools.confirm("delete it"):
         return
     tools.delete_project(project.name)
+
 
 @odev.command()
 def project_create(project_path: Optional[str] = Argument(None, help=project_path_help),
@@ -105,6 +109,7 @@ def project_create(project_path: Optional[str] = Argument(None, help=project_pat
 
 # Workspace ------------------------------------------------
 
+
 def set_target_workspace(workspace_name: str):
     if click.get_current_context().parent.invoked_subcommand is None:
         # If it's autocomplete, don't ask interactively
@@ -123,11 +128,12 @@ def set_target_workspace(workspace_name: str):
             if str(odev.paths.starting).startswith(str(odev.paths.relative('') / repo_key)):
                 odev.repo = repo
                 break
-
     return workspace_name
+
 
 def workspaces_yield(incomplete: Optional[str] = None):
     return [workspace_name for workspace_name in odev.workspaces if workspace_name.startswith(workspace_name)]
+
 
 def WorkspaceNameArgument(*args, default='last', **kwargs):
     return Argument(*args, **{
@@ -138,6 +144,7 @@ def WorkspaceNameArgument(*args, default='last', **kwargs):
         'autocompletion': workspaces_yield,
     })
 
+
 @odev.command()
 def workspaces():
     """
@@ -146,6 +153,7 @@ def workspaces():
     print(f"{odev.project.name}::")
     for workspace_name in workspaces_yield():
         print(f"    {workspace_name}")
+
 
 @odev.command()
 def workspace(workspace_name: Optional[str] = WorkspaceNameArgument(), edit: bool = False):
@@ -168,6 +176,7 @@ def workspace(workspace_name: Optional[str] = WorkspaceNameArgument(), edit: boo
     editor = Git.get_editor()
     External.edit(editor, workspace_file)
 
+
 @odev.command()
 def workspace_set(workspace_name: Optional[str] = WorkspaceNameArgument(default=None)):
     """
@@ -177,6 +186,7 @@ def workspace_set(workspace_name: Optional[str] = WorkspaceNameArgument(default=
     odev.project.last_used = workspace_name
     odev.projects.save()
     print(f"Current workspace changed: {old_workspace_name} -> {odev.workspace.name}")
+
 
 @odev.command()
 def reviews(ctx: Context, owner: Optional[str] = Argument(None, help="Github user")):
@@ -198,10 +208,11 @@ def reviews(ctx: Context, owner: Optional[str] = Argument(None, help="Github use
                 pr_date = datetime.datetime.fromisoformat(pr_data[date_field]).date()
                 pr_data[date_field[:-2] + '_days'] = (datetime.date.today() - pr_date).days
             new_data.append(pr_data)
-    for pr_data in sorted(new_data, key=lambda x: x['created_days']):
+    for pr_data in sorted(new_data, key=operator.itemgetter('created_days')):
         match = re.search('odoo/(.*)/pull', pr_data['url'])
-        pr_data['repo'] = match and match.group(1) or ''
+        pr_data['repo'] = (match and match.group(1)) or ''
         print("{repo:>10} {baseRefName:<10} {number:<7} {created_days:>5} {updated_days:>5}   {title:70.70} {url:50.50}".format(**pr_data))
+
 
 @odev.command()
 def workspace_from_pr(ctx: Context, pr_number: int = Argument(None, help="PR number"), load_workspace: bool = False):
@@ -272,6 +283,7 @@ def workspace_from_pr(ctx: Context, pr_number: int = Argument(None, help="PR num
     if load_workspace:
         load(workspace.name)
 
+
 @odev.command()
 def workspace_dupe(workspace_name: Optional[str] = WorkspaceNameArgument(default=None),
                    dest_workspace_name: Optional[str] = Argument(None, help="Destination name"),
@@ -307,6 +319,7 @@ def workspace_dupe(workspace_name: Optional[str] = WorkspaceNameArgument(default
     if _load:
         load(dest_workspace_name)
 
+
 @odev.command()
 def workspace_move(workspace_name: Optional[str] = WorkspaceNameArgument(default=None),
                    dest_workspace_name: Optional[str] = Argument(None, help="Destination name")):
@@ -320,6 +333,7 @@ def workspace_move(workspace_name: Optional[str] = WorkspaceNameArgument(default
         return
     tools.move_workspace(workspace_name, dest_workspace_name)
 
+
 @odev.command()
 def workspace_delete(workspace_name: Optional[str] = WorkspaceNameArgument(default=None)):
     """
@@ -330,6 +344,7 @@ def workspace_delete(workspace_name: Optional[str] = WorkspaceNameArgument(defau
     tools.delete_workspace(workspace_name)
     if odev.project.last_used == workspace_name:
         tools.set_last_used("master")
+
 
 @odev.command()
 def workspace_create(
@@ -387,6 +402,7 @@ def workspace_create(
 
     return odev.workspace
 
+
 # OPERATIONS ---------------------------------
 
 @odev.command()
@@ -412,6 +428,7 @@ def start(workspace_name: Optional[str] = WorkspaceNameArgument(),
                demo=demo,
                stop=stop)
 
+
 @odev.command()
 def load(workspace_name: Optional[str] = WorkspaceNameArgument(default=None)):
     """
@@ -425,6 +442,7 @@ def load(workspace_name: Optional[str] = WorkspaceNameArgument(default=None)):
     checkout(workspace_name)
 
     tools.set_last_used(workspace_name)
+
 
 @odev.command()
 def shell(interface: Optional[str] = Argument("python", help="Type of shell interface (ipython|ptpython|bpython)"),
@@ -440,6 +458,7 @@ def shell(interface: Optional[str] = Argument("python", help="Type of shell inte
                rc_fullpath,
                odev.paths.relative(odev.workspace.venv_path),
                None, options=interface, mode='shell', pty=True)
+
 
 @odev.command()
 def setup(db_name: Optional[str] = Argument(None, help="Odoo database name")):
@@ -502,6 +521,7 @@ def setup(db_name: Optional[str] = Argument(None, help="Odoo database name")):
     else:
         print(f"{post_hook_path} already exists...")
 
+
 @odev.command()
 def setup_requisites(
         path=Argument(help='Base path for the virtual env'),
@@ -531,6 +551,7 @@ def setup_requisites(
         for module in added:
             env.context.run(f"pip install --upgrade {module}")
 
+
 # Git ---------------------------------------------------
 
 @odev.command()
@@ -548,6 +569,7 @@ def status(extended: bool = True, workspace_name: Optional[str] = WorkspaceNameA
         if not extended and ret.stdout:
             return False
     return True
+
 
 @odev.command()
 def push(force: bool = False, workspace_name: Optional[str] = WorkspaceNameArgument()):
@@ -569,6 +591,7 @@ def diff(origin: bool = False, workspace_name: Optional[str] = WorkspaceNameArgu
         repo = odev.workspace.repos[repo_name]
         Git.diff(odev.paths.repo(repo), repo_name)
 
+
 @odev.command()
 def fetch(origin: bool = False, workspace_name: Optional[str] = WorkspaceNameArgument()):
     """
@@ -583,6 +606,7 @@ def fetch(origin: bool = False, workspace_name: Optional[str] = WorkspaceNameArg
         else:
             Git.fetch(path, repo_name, repo.remote, repo.branch)
 
+
 @odev.command()
 def pull(workspace_name: Optional[str] = WorkspaceNameArgument()):
     """
@@ -592,6 +616,7 @@ def pull(workspace_name: Optional[str] = WorkspaceNameArgument()):
         print(f"Pulling {repo_name}...")
         repo = odev.workspace.repos[repo_name]
         Git.pull(odev.paths.repo(repo), repo.remote, repo.branch)
+
 
 def _checkout_repo(repo, force_create=False):
     path = odev.paths.repo(repo)
@@ -606,6 +631,7 @@ def _checkout_repo(repo, force_create=False):
     print(f"Checking out {repo.name} {repo.remote}/{repo.branch}...")
     Git.checkout(path, repo.branch)
 
+
 @odev.command()
 def checkout(workspace_name: Optional[str] = WorkspaceNameArgument(default=None),
              force_create: bool = False):
@@ -616,6 +642,7 @@ def checkout(workspace_name: Optional[str] = WorkspaceNameArgument(default=None)
     for _repo_name, repo in repos.items():
         _checkout_repo(repo, force_create=force_create)
     return repos
+
 
 @odev.command()
 def update(ctx: Context, workspace_name: Optional[str] = WorkspaceNameArgument()):
@@ -630,7 +657,8 @@ def update(ctx: Context, workspace_name: Optional[str] = WorkspaceNameArgument()
     set_target_workspace(last_used)
     load(last_used)
 
-# FILES ------------------------------------------------------------
+
+# Files  ------------------------------------------------------------
 
 @odev.command()
 def hook(subcommand: Optional[str] = Argument(help="Action to be taken (show, name, edit, run, copy)", default="show"),
@@ -668,6 +696,7 @@ def hook(subcommand: Optional[str] = Argument(help="Action to be taken (show, na
     else:
         tools.cat(hook_fullpath())
 
+
 @odev.command()
 def rc(workspace_name: Optional[str] = WorkspaceNameArgument(), edit: bool = False):
     """
@@ -679,7 +708,8 @@ def rc(workspace_name: Optional[str] = WorkspaceNameArgument(), edit: bool = Fal
     else:
         tools.cat(rc_fullpath)
 
-# DB ------------------------------------------------------------
+
+# Db ------------------------------------------------------------
 
 @odev.command()
 def db_clear(db_name: Optional[str] = Argument(None, help="Database name"), workspace_name: Optional[str] = WorkspaceNameArgument()):
@@ -687,6 +717,7 @@ def db_clear(db_name: Optional[str] = Argument(None, help="Database name"), work
          Clear database by dropping and recreating it.
     """
     return PgSql.erase(db_name or odev.workspace.db_name)
+
 
 @odev.command()
 def db_dump(workspace_name: Optional[str] = WorkspaceNameArgument()):
@@ -751,6 +782,7 @@ def upgrade(repo_name: str = Argument(help="Repository to be upgraded"),
                options=f'--upgrade-path={upgrade_path}/migrations -u all',
                demo=True)
 
+
 @odev.command()
 def l10n_tests(fast: bool = False, workspace_name: Optional[str] = WorkspaceNameArgument()):
     """
@@ -791,6 +823,7 @@ def _tests(tags: Optional[str] = Argument(None, help="Corresponding to --test-ta
                      odev.workspace.modules if not fast else [],
                      tags)
 
+
 @odev.command()
 def post_tests(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags"), fast: bool = False, workspace_name: Optional[str] = WorkspaceNameArgument()):
     """
@@ -798,6 +831,7 @@ def post_tests(tags: Optional[str] = Argument(None, help="Corresponding to --tes
          This will install the demo data.
     """
     _tests(tags=f"{(tags + ',') if tags else ''}-at_install", fast=fast)
+
 
 @odev.command()
 def init_tests(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags"), workspace_name: Optional[str] = WorkspaceNameArgument()):
@@ -816,6 +850,7 @@ def external_tests(tags: Optional[str] = Argument(None, help="Corresponding to -
     """
     _tests(tags=f"{(tags + ',') if tags else ''}external", fast=True)
 
+
 @odev.command()
 def test(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags"), workspace_name: Optional[str] = WorkspaceNameArgument()):
     """
@@ -823,6 +858,7 @@ def test(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags
     """
     post_tests(tags)
     init_tests(tags)
+
 
 @odev.command()
 def db_init(workspace_name: Optional[str] = WorkspaceNameArgument(),
@@ -858,7 +894,7 @@ def db_init(workspace_name: Optional[str] = WorkspaceNameArgument(),
                demo=demo,
                stop=True)
 
-    modules = modules_csv and modules_csv.split(',') or odev.workspace.modules
+    modules = (modules_csv and modules_csv.split(',')) or odev.workspace.modules
     print('Installing modules %s ...', ','.join(modules))
     Odoo.start(odoo_path,
                rc_fullpath,
@@ -892,6 +928,7 @@ def db_init(workspace_name: Optional[str] = WorkspaceNameArgument(),
         print('Starting Odoo...')
         Odoo.start(odoo_path, rc_fullpath, venv_path, modules=None, options=options, stop=stop)
 
+
 # Venv -----------------------------------------------------------
 
 @odev.command()
@@ -901,14 +938,16 @@ def activate_path(workspace_name: Optional[str] = WorkspaceNameArgument()):
     """
     print(Path(odev.project.path) / odev.workspace.venv_path / "bin" / "activate")
 
+
 # Hub ------------------------------------------------------------
 
 @odev.command()
-def hub(workspace_name: Optional[str] = WorkspaceNameArgument(), select: bool=False):
+def hub(workspace_name: Optional[str] = WorkspaceNameArgument(), select: bool = False):
     """
         Open Github in a browser on a branch of a given repo.
     """
     tools.open_hub(odev.project, repo=not select and odev.repo)
+
 
 # Lint -----------------------------------------------------------
 
@@ -927,6 +966,7 @@ def lint(workspace_name: Optional[str] = WorkspaceNameArgument()):
                      ['test_lint'],
                      "/test_lint")
 
+
 # Runbot ---------------------------------------------------------
 
 @odev.command()
@@ -935,6 +975,7 @@ def runbot(workspace_name: Optional[str] = WorkspaceNameArgument()):
         Open runbot in a browser for current bundle.
     """
     tools.open_runbot(odev.project, odev.workspace)
+
 
 # Deps -----------------------------------------------------------
 
