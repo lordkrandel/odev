@@ -66,9 +66,11 @@ def projects(edit: bool = False):
         editor = Git.get_editor()
         External.edit(editor, odev.paths.projects)
         return
+    print(f"{odev.paths.config}/workspaces/")
+    max_len = max(len(project.name) for _, project in odev.projects.items())
     for name in sorted(odev.projects, key=lambda x: odev.projects[x].path):
         project = odev.projects[name]
-        print(f"{project.path:40}  {project.name}  {odev.paths.config / 'workspaces' / project.name}")
+        print(f"    {project.name:{max_len}} --> {project.path}")
 
 
 @odev.command()
@@ -150,7 +152,7 @@ def workspaces():
     """
         Display all the available workspaces for current project.
     """
-    print(f"{odev.project.name}::")
+    print(f"{odev.paths.config / odev.project.name}/")
     for workspace_name in workspaces_yield():
         print(f"    {workspace_name}")
 
@@ -534,7 +536,7 @@ def setup_requisites(
     venv_path = Path(path)
     exists = venv_path.exists()
     paths.ensure(venv_path)
-    added = (added_csv or '').split(',')
+    added = [x for x in (added_csv or '').split(',') if x.strip()]
     reqs_files = (reqs_file_csv or '').split(",")
 
     env = Environment(venv_path)
