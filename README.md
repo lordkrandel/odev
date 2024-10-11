@@ -78,6 +78,16 @@ Loads a `workspace`, `fetch`es all repositories, pulls them all, and reloads the
 
 ![image](https://github.com/user-attachments/assets/0b23be01-1ff5-4b3d-80fb-3adf98c03b6b)
 
+## status
+
+```bash
+ocli status
+```
+
+Shows the `git status` for all repositories of the current `workspace`.
+
+![immagine](https://github.com/user-attachments/assets/b1eafe04-cc65-44d0-aa24-90c6158ff8d8)
+
 ## help
 
 ... and there are many more commands!
@@ -104,7 +114,6 @@ Loads a `workspace`, `fetch`es all repositories, pulls them all, and reloads the
 │ external-tests      Init db and run Odoo's external tests. This will install the demo data.                         │
 │ fetch               Git-fetches multiple repositories.                                                              │
 │ hook                Display or edit the post_hook python file.                                                      │
-│ hub                 Open Github in a browser on a branch of a given repo.                                           │
 │ init-tests          Init db and run Odoo's at_install tests. This will install the demo data.                       │
 │ l10n-tests          Run l10n tests                                                                                  │
 │ lint                Start linting tests.                                                                            │
@@ -117,7 +126,6 @@ Loads a `workspace`, `fetch`es all repositories, pulls them all, and reloads the
 │ pull                Git-pulls selected repos for current workspace.                                                 │
 │ push                Git-pushes multiple repositories.                                                               │
 │ rc                  View or edit the .odoorc config with default editor.                                            │
-│ runbot              Open runbot in a browser for current bundle.                                                    │
 │ setup               Sets up the main folder, with repos and venv.                                                   │
 │ setup-requisites    Setup a Python virtual environment for the project.                                             │
 │ shell               Starts Odoo as an interactive shell.                                                            │
