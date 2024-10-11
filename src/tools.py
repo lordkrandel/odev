@@ -207,23 +207,6 @@ def select_branch(project, repo, action, choices=None, remote=None):
         return Repo(repo.name, repo.dev, repo.origin, remote, branch, repo.addons_folders)
 
 
-# Runbot -----------------------------------------------
-
-def open_runbot(project, workspace):
-    url = f"https://runbot.odoo.com/runbot/r-d-1?search={workspace.repos['odoo'].branch}"
-    webbrowser.open(url)
-
-
-# Github----------------------------------------------------
-
-def open_hub(project, repo=None):
-    base_url = "https://www.github.com"
-    if not repo:
-        repo = select_repo_and_branch(project, "hub")
-    url_repo_part = getattr(repo, repo.remote).split(':')[1]
-    url = f"{base_url}/{url_repo_part}/tree/{repo.branch}"
-    webbrowser.open(url)
-
 # Async ------------------------------------------------------
 
 def await_first_result(coros_dict):

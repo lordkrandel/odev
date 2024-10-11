@@ -902,16 +902,6 @@ def activate_path(workspace_name: Optional[str] = WorkspaceNameArgument()):
     print(Path(odev.project.path) / odev.workspace.venv_path / "bin" / "activate")
 
 
-# Hub ------------------------------------------------------------
-
-@odev.command()
-def hub(workspace_name: Optional[str] = WorkspaceNameArgument(), select: bool = False):
-    """
-        Open Github in a browser on a branch of a given repo.
-    """
-    tools.open_hub(odev.project, repo=not select and odev.repo)
-
-
 # Lint -----------------------------------------------------------
 
 @odev.command()
@@ -928,16 +918,6 @@ def lint(workspace_name: Optional[str] = WorkspaceNameArgument()):
                      odev.paths.relative(odev.workspace.venv_path),
                      ['test_lint'],
                      "/test_lint")
-
-
-# Runbot ---------------------------------------------------------
-
-@odev.command()
-def runbot(workspace_name: Optional[str] = WorkspaceNameArgument()):
-    """
-        Open runbot in a browser for current bundle.
-    """
-    tools.open_runbot(odev.project, odev.workspace)
 
 
 # Deps -----------------------------------------------------------
