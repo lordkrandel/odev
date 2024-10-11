@@ -255,14 +255,14 @@ def workspace_from_pr(ctx: Context, pr_number: int = Argument(None, help="PR num
     repo_names = [repo_name] + list(result)
     print(f"Branch '{branch}' has been found in {repo_names}")
 
-    if not (db_name := (tools.input_text("What database name to use?") or '').strip()):
-        return
+    db_name = tools.input_text("What database name to use?").strip()
+    venv_path = tools.select_venv(odev.workspace)
 
     workspace = workspace_create(
          ctx,
          workspace_name=branch,
          db_name=db_name,
-         venv_path=None,
+         venv_path=venv_path,
          modules_csv=None,
          repos_csv=",".join(repo_names))
     if not workspace:
@@ -712,7 +712,8 @@ def rc(workspace_name: Optional[str] = WorkspaceNameArgument(), edit: bool = Fal
 # Db ------------------------------------------------------------
 
 @odev.command()
-def db_clear(db_name: Optional[str] = Argument(None, help="Database name"), workspace_name: Optional[str] = WorkspaceNameArgument()):
+def db_clear(db_name: Optional[str] = Argument(None, help="Database name"),
+             workspace_name: Optional[str] = WorkspaceNameArgument()):
     """
          Clear database by dropping and recreating it.
     """
@@ -740,66 +741,52 @@ def db_restore(workspace_name: Optional[str] = WorkspaceNameArgument()):
 
 
 @odev.command()
-def upgrade(repo_name: str = Argument(help="Repository to be upgraded"),
-            old_remote: str = Argument(help="Origin of the branch to be upgraded"),
-            old_branch: str = Argument(help="Branch to be upgraded"),
-            old_modules_csv: Optional[str] = Argument(None, help="Modules to be loaded before upgrade"),
+def upgrade(old_workspace_name: str = Argument(help="Repository to be upgraded"),
             workspace_name: Optional[str] = WorkspaceNameArgument()):
     """
-        Run upgrade from a user-specified old version to the one specified in the Workspace
-        ex. ocli upgrade odoo origin 15.0 account_account,l10n_it_edi,l10n_it_edi_pa
+        Run upgrade from a old Workspace to a new Workspace
+        ex. ocli upgrade 15.0 15.0-account-myfix
     """
 
     if not status(extended=False):
         print("Cannot upgrade, changes present.")
         return
 
-    new_repo = odev.workspace.repos[repo_name]
-    new_modules = odev.workspace.modules
-    old_modules = old_modules_csv.split(',') if old_modules_csv else new_modules
-    old_repo = copy.copy(new_repo)
-    old_repo.remote = old_remote
-    old_repo.branch = old_branch
-    rc_fullpath = odev.paths.relative(odev.workspace.rc_file)
-    venv_path = odev.paths.relative(odev.workspace.venv_path)
     odoo_path = odev.paths.repo(odev.workspace.repos['odoo'])
-    upgrade_path = odev.paths.repo(odev.workspace.repos['upgrade'])
+    upgrade_path = odev.paths.repo(odev.workspace.repos['upgrade']) / 'migrations'
+    upgrade_util_path = odev.paths.repo(odev.workspace.repos['upgrade-util']) / 'src'
+    upgrade_options = f'--upgrade-path={upgrade_util_path},{upgrade_path} -u all'
 
-    print("Upgrading::")
-    print(f"    repo: {repo_name}")
-    print(f"    upgrading branch: {old_repo.remote}/{old_repo.branch} -> {new_repo.remote}/{new_repo.branch}")
-    print(f"    modules: {old_modules}{' -> ' + str(new_modules) if new_modules != str(old_modules) else ''}")
+    print(f"Upgrading {old_workspace_name} -> {workspace_name}")
+    print(f"Loading {old_workspace_name}...")
+    load(old_workspace_name)
+    db_init(old_workspace_name, demo=True, stop=True, post_init_hook=False)
 
-    _checkout_repo(old_repo)
-    db_init(workspace_name, modules_csv=','.join(old_modules), demo=True, stop=True, post_init_hook=False)
+    print(f"Loading {workspace_name}...")
+    load(workspace_name)
+    print("Cleaning old folders that might have old files")
+    Git.clean(odoo_path, quiet=True)
 
-    _checkout_repo(new_repo)
-    Git.clean(odoo_path)
-    Odoo.start(odoo_path,
-               rc_fullpath,
-               venv_path,
-               modules=new_modules,
-               options=f'--upgrade-path={upgrade_path}/migrations -u all',
-               demo=True)
+    start(odoo_path, options=upgrade_options, demo=True)
 
 
 @odev.command()
-def l10n_tests(fast: bool = False, workspace_name: Optional[str] = WorkspaceNameArgument()):
-    """
-        Run l10n tests
-    """
+def l10n_tests(tags: Optional[str] = "*",
+               workspace_name: Optional[str] = WorkspaceNameArgument(),
+               fast: bool = False):
+    """ Run l10n tests """
 
     # Eventually erase the database
     if not fast:
         print(f'Erasing {odev.workspace.db_name}...')
         db_clear(odev.workspace.db_name)
-
     rc_fullpath = odev.paths.relative(odev.workspace.rc_file)
     Rc(rc_fullpath).check_db_name(odev.workspace.db_name)
 
     Odoo.l10n_tests(odev.paths.relative('odoo'),
                     odev.workspace.db_name,
-                    odev.paths.relative(odev.workspace.venv_path))
+                    odev.paths.relative(odev.workspace.venv_path),
+                    tags)
 
 
 def _tests(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags"), fast: bool = False):

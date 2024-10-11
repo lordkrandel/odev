@@ -194,7 +194,7 @@ def select_remote(action, remote=None, context=None):
 def select_branch(project, repo, action, choices=None, remote=None):
     if not choices:
         remote = select_remote(action, remote, context=repo.name)
-        path = odev.paths.bare(repo)
+        path = odev.paths.repo(repo)
         choices = Git.get_remote_branches(path, remote)
     prefix = f"{repo.name} > " if not remote else f"{repo.name}/{remote} > "
     branch = questionary.autocomplete(
@@ -252,6 +252,16 @@ def await_all_results(coros_dict):
                 results[task.get_name()] = ret.stdout
         return results
     return asyncio.run(await_all_result_async(coros_dict))
+
+
+# Venv -----------------------------------------------------
+
+def select_venv(workspace):
+    venvs = [str(f) for f in Path(odev.project.path).glob(".venv*") if f.is_dir()]
+    return (
+        select("venv", "select", venvs, questionary.autocomplete)
+        or workspace.venv_path
+    )
 
 
 # Questionary helpers --------------------------------------

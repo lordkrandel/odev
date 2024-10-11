@@ -10,10 +10,10 @@ import re
 class Git(External):
 
     @classmethod
-    def clean(cls, folder='.'):
+    def clean(cls, folder='.', quiet=False):
         context = invoke.Context()
         with context.cd(folder):
-            context.run('git clean -xdf')
+            context.run(f'git clean -xdf{"q" if quiet else ""}')
 
     @classmethod
     def get_editor(cls):
