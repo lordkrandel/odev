@@ -117,7 +117,6 @@ Loads a `workspace`, `fetch`es all repositories, pulls them all, and reloads the
 │ pull                Git-pulls selected repos for current workspace.                                                 │
 │ push                Git-pushes multiple repositories.                                                               │
 │ rc                  View or edit the .odoorc config with default editor.                                            │
-│ reviews             Requires `gh` to be installed (Github CLI) Lists the current reviews you're in charge with.     │
 │ runbot              Open runbot in a browser for current bundle.                                                    │
 │ setup               Sets up the main folder, with repos and venv.                                                   │
 │ setup-requisites    Setup a Python virtual environment for the project.                                             │

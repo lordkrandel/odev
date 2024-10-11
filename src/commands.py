@@ -191,32 +191,6 @@ def workspace_set(workspace_name: Optional[str] = WorkspaceNameArgument(default=
 
 
 @odev.command()
-def reviews(ctx: Context, owner: Optional[str] = Argument(None, help="Github user")):
-    """
-        Requires `gh` to be installed (Github CLI)
-        Lists the current reviews you're in charge with.
-    """
-    ensure_gh()
-    coros_dict = {name: Gh.get_pr_list(owner, name) for name in template_repos}
-    result = tools.await_all_results(coros_dict)
-    if not result:
-        print("Cannot download PR list")
-        return
-    prs_data = {k: json.loads(v) for k, v in result.items() if v.strip() != '[]'}
-    new_data = []
-    for _repo_name, prs in prs_data.items():
-        for pr_data in prs:
-            for date_field in ('createdAt', 'updatedAt'):
-                pr_date = datetime.datetime.fromisoformat(pr_data[date_field]).date()
-                pr_data[date_field[:-2] + '_days'] = (datetime.date.today() - pr_date).days
-            new_data.append(pr_data)
-    for pr_data in sorted(new_data, key=operator.itemgetter('created_days')):
-        match = re.search('odoo/(.*)/pull', pr_data['url'])
-        pr_data['repo'] = (match and match.group(1)) or ''
-        print("{repo:>10} {baseRefName:<10} {number:<7} {created_days:>5} {updated_days:>5}   {title:70.70} {url:50.50}".format(**pr_data))
-
-
-@odev.command()
 def workspace_from_pr(ctx: Context, pr_number: int = Argument(None, help="PR number"), load_workspace: bool = False):
     """
         Requires `gh` to be installed (Github CLI)
