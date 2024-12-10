@@ -10,8 +10,6 @@ import datetime
 import fileinput
 import itertools
 import json
-import operator
-import re
 import shutil
 import sys
 from pathlib import Path
@@ -29,7 +27,7 @@ from odev import odev
 from pgsql import PgSql
 from rc import Rc
 from templates import main_repos, post_hook_template, template_repos
-from typer import Argument, Context
+from typer import Argument, Context, Option
 from workspace import Workspace
 
 from odoo import Odoo
@@ -349,6 +347,8 @@ def workspace_create(
         modules_csv = tools.input_text("What modules to use? (CSV)").strip()
     if not modules_csv:
         return
+    venv_path = venv_path or tools.select_venv(odev.workspace)
+
     if not repos_csv:
         repos = checkout(workspace_name, force_create=True)
         if not repos:
@@ -356,7 +356,7 @@ def workspace_create(
     else:
         repos = {repo_name: template_repos[repo_name] for repo_name in repos_csv.split(',')}
 
-    tools.create_workspace(workspace_name, db_name, modules_csv, repos)
+    tools.create_workspace(workspace_name, db_name, modules_csv, repos, venv_path)
 
     # If this function was used as a command, also checkout the branches
     if ctx.command.name in ('workspace-from-pr', 'workspace-create'):

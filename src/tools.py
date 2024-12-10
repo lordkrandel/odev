@@ -92,7 +92,7 @@ def cleanup_workspace_name(workspace_name):
         return workspace_name.split(":")[1]
     return workspace_name
 
-def create_workspace(workspace_name, db_name, modules_csv, repos=None):
+def create_workspace(workspace_name, db_name, modules_csv, repos=None, venv_path=None):
     repos = repos or select_repositories("checkout", workspace=None, checked=main_repos)
     workspace = Workspace(
         workspace_name,
@@ -101,7 +101,7 @@ def create_workspace(workspace_name, db_name, modules_csv, repos=None):
         modules_csv.split(','),
         f"{workspace_name}.dmp",
         "post_hook.py",
-        '.venv',
+        venv_path,
         '.odoorc')
     workspace_path = odev.paths.workspace(workspace_name)
     paths.ensure(workspace_path)
