@@ -165,18 +165,18 @@ def workspace(workspace_name: Optional[str] = WorkspaceNameArgument(), edit: boo
     if not odev.workspace:
         print(f"No workspace named '{workspace_name}' found")
         return
+
     workspace_file = odev.paths.workspace_file(odev.workspace.name)
-
-    print(f"{odev.workspace.name}::")
-    print(f"    {'project_folder:':18} {odev.project.path}")
-    print(f"    {'workspace_folder:':18} {odev.paths.workspace(odev.workspace.name)}")
-    print(f"    {'workspace_file:':18} {odev.paths.workspace_file(odev.workspace.name)}")
     if not edit:
+        print(f"{odev.workspace.name}::")
+        print(f"    {'project_folder:':18} {odev.project.path}")
+        print(f"    {'workspace_folder:':18} {odev.paths.workspace(odev.workspace.name)}")
+        print(f"    {'workspace_file:':18} {odev.paths.workspace_file(odev.workspace.name)}")
         print(odev.workspace.to_json())
-        return
-
-    editor = Git.get_editor()
-    External.edit(editor, workspace_file)
+    else:
+        editor = Git.get_editor()
+        print(f"{editor} {workspace_file}")
+        External.edit(editor, workspace_file)
 
 
 @odev.command()
