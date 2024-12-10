@@ -416,24 +416,34 @@ def load(workspace_name: Optional[str] = WorkspaceNameArgument(default=None)):
 
     set_target_workspace(workspace_name)
     checkout(workspace_name)
+    clean(workspace_name, quiet=True)
 
     tools.set_last_used(workspace_name)
 
 
 @odev.command()
-def shell(interface: Optional[str] = Argument("python", help="Type of shell interface (ipython|ptpython|bpython)"),
+def clean(workspace_name: Optional[str] = WorkspaceNameArgument(), quiet: bool = False):
+    for _repo_name, repo in odev.workspace and odev.workspace.repos.items():
+        Git.clean(odev.paths.repo(repo), quiet=quiet)
+
+
+@odev.command()
+def shell(interface: Optional[str] = Argument("ipython", help="Type of shell interface (ipython|ptpython|bpython)"),
+          startup_script: Optional[str] = Option(None, help="Startup Python script to initialize the Shell"),
           workspace_name: Optional[str] = WorkspaceNameArgument()):
     """
         Starts Odoo as an interactive shell.
     """
     interface = f'--shell-interface={interface}' if interface else ''
+    startup_vars = f'PYTHONSTARTUP={startup_script}' if startup_script else ''
     rc_fullpath = odev.paths.relative(odev.workspace.rc_file)
     Rc(rc_fullpath).check_db_name(odev.workspace.db_name)
     odoo_repo = odev.workspace.repos['odoo']
     Odoo.start(odev.paths.repo(odoo_repo),
                rc_fullpath,
                odev.paths.relative(odev.workspace.venv_path),
-               None, options=interface, mode='shell', pty=True)
+               None, options=interface, mode='shell', pty=True,
+               env_vars=startup_vars)
 
 
 @odev.command()
@@ -824,14 +834,17 @@ def test(tags: Optional[str] = Argument(None, help="Corresponding to --test-tags
 
 
 @odev.command()
-def db_init(workspace_name: Optional[str] = WorkspaceNameArgument(),
-            options: Optional[str] = None,
-            modules_csv: Optional[str] = None,
-            dump_before: bool = False,
-            dump_after: bool = False,
-            demo: bool = False,
-            stop: bool = False,
-            post_init_hook: bool = True):
+def db_init(
+        workspace_name: Optional[str] = WorkspaceNameArgument(),
+        options: Optional[str] = None,
+        modules_csv: Optional[str] = None,
+        dump_before: bool = False,
+        dump_after: bool = False,
+        demo: bool = False,
+        stop: bool = False,
+        debug_hook: bool = False,
+        post_init_hook: bool = True
+    ):
     """
          Initialize the database, with modules and hook.
     """
@@ -874,14 +887,26 @@ def db_init(workspace_name: Optional[str] = WorkspaceNameArgument(),
     if post_init_hook:
         print('Executing post_init_hook...')
         hook_path = odev.paths.workspace(odev.workspace.name) / odev.workspace.post_hook_script
-        Odoo.start(odoo_path,
-                   rc_fullpath,
-                   venv_path,
-                   modules=None,
-                   options=f'{options} < {hook_path}',
-                   mode='shell',
-                   demo=demo,
-                   stop=True)
+        if debug_hook:
+            stop = False
+            env_vars = f'PYTHONSTARTUP="{hook_path}"'
+        else:
+            env_vars = None
+            options = f'{options} < {hook_path}'
+        Odoo.start(
+            odoo_path,
+            rc_fullpath,
+            venv_path,
+            modules=None,
+            options=options,
+            mode='shell',
+            demo=demo,
+            pty=True,
+            stop=stop,
+            env_vars=env_vars,
+        )
+        if debug_hook:
+            return
 
     # Dump the db after the hook if the user has specifically asked for it
     if dump_after:
