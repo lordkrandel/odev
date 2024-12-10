@@ -88,6 +88,13 @@ Shows the `git status` for all repositories of the current `workspace`.
 
 ![immagine](https://github.com/user-attachments/assets/b1eafe04-cc65-44d0-aa24-90c6158ff8d8)
 
+## workspace --edit, rc --edit, hook edit
+
+Edit the related file with `git`'s configured editor (`core.editor`)
+
+
+
+
 ## help
 
 ... and there are many more commands!
