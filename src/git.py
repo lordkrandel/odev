@@ -53,7 +53,7 @@ class Git(External):
         with context.cd(path):
             current_branch = cls.get_current_branch(path)
             if branch != current_branch:
-                context.run('git checkout %s %s' % (options or '', branch))
+                context.run('git checkout --progress %s %s' % (options or '', branch))
 
     @classmethod
     def get_current_branch(cls, path):
@@ -87,7 +87,7 @@ class Git(External):
     def fetch(cls, path, repo_name, remote_name, branch_name):
         context = invoke.Context()
         with context.cd(path):
-            context.run('git fetch %s %s' % (remote_name, branch_name))
+            context.run('git fetch --progress --verbose %s %s' % (remote_name, branch_name))
 
     @classmethod
     def push(cls, path, force=False):
@@ -107,7 +107,7 @@ class Git(External):
         cls.fetch(base_path, repo_name, 'origin', 'master')
         context = invoke.Context()
         with context.cd(path):
-            context.run('git checkout master')
+            context.run('git checkout --progress master')
         cls.pull(path, 'origin', 'master')
 
     @classmethod
