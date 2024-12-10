@@ -31,17 +31,20 @@ class Odoo(External):
 
     @classmethod
     def get_demo_option(cls, demo):
-        return not demo and "--without-demo=WITHOUT_DEMO" or ""
+        return not demo and "--without-demo=1" or ""
 
     @classmethod
-    def start(cls, bin_path, rc_fullpath, venv_path, modules, options='', mode='', pty=False, demo=False, stop=False, in_stream=None):
+    def start(cls, bin_path, rc_fullpath, venv_path, modules, options=None, mode=None, pty=False, demo=False, stop=False, in_stream=None, env_vars=None):
         cls.banner(bin_path, rc_fullpath, venv_path, modules, options, mode, demo, stop)
+        options = options or ''
+        mode = mode or ''
+        env_vars = env_vars or ''
         modules = ("-i %s" % ",".join(modules)) if modules else ''
         stop = "--stop-after-init" if stop else ''
         context = invoke.Context()
         with context.cd(bin_path):
             venv_script_path = Path(venv_path) / 'bin' / 'activate'
-            command = f'source {venv_script_path} && {bin_path}/odoo-bin {mode} {cls.get_demo_option(demo)} -c {rc_fullpath} {modules} {stop} {options}'
+            command = f'source {venv_script_path} && {env_vars} {bin_path}/odoo-bin {mode} {cls.get_demo_option(demo)} -c {rc_fullpath} {modules} {stop} {options}'
             print(command)
             context.run(command, pty=pty, in_stream=in_stream)
 
