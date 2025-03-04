@@ -3,6 +3,8 @@
 from repo import Repo
 
 
+have_dev_origin = ('odoo', 'enterprise')
+
 main_repos = ('odoo', 'enterprise')
 template_repos = {
     'odoo': Repo(

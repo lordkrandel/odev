@@ -1,32 +1,28 @@
 #!/usr/bin/python3
-# Part of Odoo. See LICENSE file for full copyright and licensing details.
-# ruff: noqa: T201
-
-from __future__ import annotations
 
 import ast
 import copy
-import datetime
 import fileinput
 import itertools
-import json
 import shutil
+import re
 import sys
 from pathlib import Path
 from typing import Optional
 
 import click
+
 import paths
 import tools
+from runbot import Runbot
 from env import Environment
 from external import External
-from gh import Gh
 from git import Git
 from invoke import UnexpectedExit
 from odev import odev
 from pgsql import PgSql
 from rc import Rc
-from templates import main_repos, post_hook_template, template_repos
+from templates import main_repos, post_hook_template, template_repos, have_dev_origin
 from typer import Argument, Context, Option
 from workspace import Workspace
 
@@ -44,19 +40,10 @@ repos_csv_help = "CSV list of repositories"
 workspace_name_help = "Name of the workspace that holds the database information, omit to use current"
 
 
-# Gh ---------------------------------------------
-
-def ensure_gh():
-    if not Gh.exists():
-        print("GitHub CLI is not installed, this function is therefore disabled.")
-        print("Visit https://cli.github.com/manual/installation for more information.")
-        sys.exit(0)
-
-
 # Project ----------------------------------------
 
 @odev.command()
-def projects(edit: bool = False):
+def projects(edit: bool = False, simple: bool = False):
     """
         Display all the available project folders.
     """
@@ -64,11 +51,16 @@ def projects(edit: bool = False):
         editor = Git.get_editor()
         External.edit(editor, odev.paths.projects)
         return
-    print(f"{odev.paths.config}/workspaces/")
+    if not simple:
+        print(f"{odev.paths.config}/workspaces/")
     max_len = max(len(project.name) for _, project in odev.projects.items())
     for name in sorted(odev.projects, key=lambda x: odev.projects[x].path):
         project = odev.projects[name]
-        print(f"    {project.name:{max_len}} --> {project.path}")
+        if simple:
+            message = project.path
+        else:
+            message = f"    {project.name:{max_len}} --> {project.path}"
+        print(message)
 
 
 @odev.command()
@@ -77,6 +69,18 @@ def project():
         Display project data for the current folder.
     """
     print(f"{odev.project.name}:: {odev.project.to_json()}")
+
+
+@odev.command()
+def last_used():
+    """
+        Is cwd a repo folder ?
+    """
+    if odev.project:
+        print(odev.project.last_used)
+        sys.exit(0)
+    else:
+        sys.exit(1)
 
 
 @odev.command()
@@ -121,7 +125,7 @@ def set_target_workspace(workspace_name: str):
     elif workspace_name == 'last':
         workspace_name = odev.project.last_used
     else:
-        workspace_name = tools.cleanup_workspace_name(workspace_name)
+        workspace_name = tools.cleanup_colon(workspace_name)
     odev.workspace = Workspace.load_json(odev.paths.workspace_file(workspace_name))
     if odev.workspace:
         for repo_key, repo in odev.workspace.repos.items():
@@ -189,67 +193,43 @@ def workspace_set(workspace_name: Optional[str] = WorkspaceNameArgument(default=
 
 
 @odev.command()
-def workspace_from_pr(ctx: Context, pr_number: int = Argument(None, help="PR number"), load_workspace: bool = False):
+def workspace_bundle(
+    ctx: Context,
+    bundle_name: str = Argument(None, help="Bundle name"),
+    load_workspace: bool = True
+):
     """
-        Requires `gh` to be installed (Github CLI)
-        Creates a workspace from a PR number on odoo/odoo or odoo/enterprise.
+        Creates a workspace from a Bundle on Runbot.
         If `load` is specified, it also loads generated workspace.
     """
-    ensure_gh()
 
-    main_owner, dev_owner = 'odoo', 'odoo-dev'
-    coros_dict = {name: Gh.get_pr_info(main_owner, name, pr_number) for name in template_repos}
-    result = tools.await_all_results(coros_dict)
-    if not result:
-        print(f"PR {pr_number} not found")
+    bundle_name = tools.cleanup_colon(bundle_name)
+    if not (repo_names := Runbot.get_branches(bundle_name)):
+        print(f"Bundle {bundle_name} not found")
         return
-
-    gh_result = {repo_name: json.loads(json_data) for repo_name, json_data in result.items()}
-    if len(gh_result) > 1:
-        print()
-        print(f"PR #{pr_number} can be found in more than one repository:")
-        print()
-        for repo_name, gh_data in gh_result.items():
-            updated_at = datetime.datetime.fromisoformat(gh_data['updated_at'])
-            print(f">> odoo/{repo_name:<12} {tools.date_to_string(updated_at):<20} {gh_data['title']}")
-        print()
-        repo = tools.select_repository("download from", odev.workspace, repo_names=list(result))
-        gh_result = {k: v for k, v in gh_result.items() if k == repo.name}
-
-    repo_name, info = next(iter(gh_result.items()))
-    branch = info['head']['ref']
-    title = info['title']
-    base_ref = info['base']['ref']
-
-    print(f"{repo_name}#{pr_number}   {title} ({branch})")
-
-    repos_to_search = [x for x in template_repos if x != repo_name]
-    coros_dict = {name: Gh.get_branch_info(dev_owner, name, branch) for name in repos_to_search}
-    result = tools.await_all_results(coros_dict)
-    repo_names = [repo_name] + list(result)
-    print(f"Branch '{branch}' has been found in {repo_names}")
-
     db_name = tools.input_text("What database name to use?").strip()
     venv_path = tools.select_venv(odev.workspace)
 
+    missing_repos = set(main_repos) - set(repo_names)
     workspace = workspace_create(
          ctx,
-         workspace_name=branch,
+         workspace_name=bundle_name,
          db_name=db_name,
          venv_path=venv_path,
          modules_csv=None,
-         repos_csv=",".join(repo_names))
+         repos_csv=",".join(repo_names)
+    )
     if not workspace:
         return
-
-    missing_repos = {missing_repo for missing_repo in main_repos if missing_repo not in repo_names}
     for repo_name, repo in workspace.repos.items():
-        repo.remote = 'dev'
-        repo.branch = branch
+        repo.remote = 'dev' if repo_name in have_dev_origin else 'origin'
+        repo.branch = bundle_name
     for missing_repo in missing_repos:
         new_repo = copy.copy(template_repos[missing_repo])
         new_repo.remote = 'origin'
-        new_repo.branch = base_ref
+        match = re.match(r"((?:saas-)?\d{1,2}\.\d)", bundle_name)
+        new_repo.branch = match.group(0)
+
         workspace.repos[missing_repo] = new_repo
     workspace.save_json(odev.paths.workspace_file(workspace.name))
     print(f"Workspace {workspace.name} has been created")
@@ -269,7 +249,7 @@ def workspace_dupe(workspace_name: Optional[str] = WorkspaceNameArgument(default
         dest_workspace_name = (tools.input_text("What name for your workspace?") or '').strip()
         if not dest_workspace_name:
             return
-    dest_workspace_name = tools.cleanup_workspace_name(dest_workspace_name)
+    dest_workspace_name = tools.cleanup_colon(dest_workspace_name)
     sourcepath, destpath = odev.paths.workspace(workspace_name), odev.paths.workspace(dest_workspace_name)
     print(f'Copy {sourcepath} -> {destpath}')
     shutil.copytree(sourcepath, destpath)
@@ -336,7 +316,7 @@ def workspace_create(
         workspace_name = (tools.input_text("What name for your workspace?") or '').strip()
     if not workspace_name:
         return
-    workspace_name = tools.cleanup_workspace_name(workspace_name)
+    workspace_name = tools.cleanup_colon(workspace_name)
     if workspace_name in odev.workspaces + ['last_used']:
         print(f"Workspace {workspace_name} is empty or already exists")
         return
@@ -358,18 +338,19 @@ def workspace_create(
 
     tools.create_workspace(workspace_name, db_name, modules_csv, repos, venv_path)
 
-    # If this function was used as a command, also checkout the branches
-    if ctx.command.name in ('workspace-from-pr', 'workspace-create'):
+    if ctx.command.name == 'workspace-create':
         for _repo_name, repo in repos.items():
             _checkout_repo(repo, force_create=True)
 
+    # If this function was used as a command, also checkout the branches
+    if ctx.command.name in ('workspace-bundle', 'workspace-create'):
         set_target_workspace(workspace_name)
         tools.set_last_used(workspace_name)
 
         workspace_file = odev.paths.workspace_file(workspace_name)
         with fileinput.FileInput(workspace_file, inplace=True, backup='.bak') as f:
             for line in f:
-                if repo.branch in line and "branch" in line:
+                if workspace_name in line and "branch" in line:
                     print(f'{line.rstrip()} # "{workspace_name}",')
                 elif 'remote' in line and '"dev"' not in line:
                     print(f'{line.rstrip()} # "dev",')
@@ -625,7 +606,8 @@ def checkout(workspace_name: Optional[str] = WorkspaceNameArgument(default=None)
         Git-checkouts multiple repositories.
     """
     repos = (odev.workspace and odev.workspace.repos) or tools.select_repos_and_branches(odev.project, "checkout", odev.workspace)
-    for _repo_name, repo in repos.items():
+    for repo_name, repo in repos.items():
+        print(f"Checkout repo {repo_name} branch {repo.branch}...")
         _checkout_repo(repo, force_create=force_create)
     return repos
 
@@ -637,7 +619,8 @@ def update(ctx: Context, workspace_name: Optional[str] = WorkspaceNameArgument()
     """
     last_used = odev.project.last_used
     repos = checkout(workspace_name)
-    for _repo_name, repo in repos.items():
+    for repo_name, repo in repos.items():
+        print(f"Updating repo {repo_name}...")
         Git.pull(odev.paths.repo(repo), repo.remote, repo.branch)
 
     set_target_workspace(last_used)
@@ -741,7 +724,7 @@ def upgrade(old_workspace_name: str = Argument(help="Repository to be upgraded")
     odoo_path = odev.paths.repo(odev.workspace.repos['odoo'])
     upgrade_path = odev.paths.repo(odev.workspace.repos['upgrade']) / 'migrations'
     upgrade_util_path = odev.paths.repo(odev.workspace.repos['upgrade-util']) / 'src'
-    upgrade_options = f'--upgrade-path={upgrade_util_path},{upgrade_path} -u all'
+    upgrade_options = f'--upgrade-path={upgrade_util_path},{upgrade_path} -u all --test-enable --test-tags=at_install,-post_install'
 
     print(f"Upgrading {old_workspace_name} -> {workspace_name}")
     print(f"Loading {old_workspace_name}...")

@@ -9,7 +9,7 @@ from typer import Typer
 
 class Odev(Typer):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super(Odev, self).__init__(*args, **kwargs)
         self.workspace = None
         self.repo = None
 
@@ -46,4 +46,4 @@ class Odev(Typer):
         self.paths.workspace_file = lambda name: self.paths.workspace(name) / Path(f"{name}.json")
         self.paths.hook_file = lambda name: self.paths.workspace(name) / Path("post_hook.py")
 
-odev = Odev()
+odev = Odev(rich_markup_mode=False)

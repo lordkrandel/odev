@@ -15,7 +15,7 @@ from datetime import datetime
 import questionary
 import shutil
 import sys
-import webbrowser
+
 
 custom_style = questionary.Style.from_dict({
     "completion-menu": "bg:#222222",
@@ -87,10 +87,10 @@ def set_last_used(last_used, project=odev.project):
 
 # Workspace handling ------------------------------------------
 
-def cleanup_workspace_name(workspace_name):
-    if workspace_name and ":" in workspace_name:
-        return workspace_name.split(":")[1]
-    return workspace_name
+def cleanup_colon(name):
+    if name and ":" in name:
+        return name.split(":")[1]
+    return name
 
 def create_workspace(workspace_name, db_name, modules_csv, repos=None, venv_path=None):
     repos = repos or select_repositories("checkout", workspace=None, checked=main_repos)
