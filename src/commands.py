@@ -14,7 +14,7 @@ import click
 
 import paths
 import tools
-from runbot import Runbot
+from consts import APPNAME
 from env import Environment
 from external import External
 from git import Git
@@ -22,6 +22,7 @@ from invoke import UnexpectedExit
 from odev import odev
 from pgsql import PgSql
 from rc import Rc
+from runbot import Runbot
 from templates import main_repos, post_hook_template, template_repos, have_dev_origin
 from typer import Argument, Context, Option
 from workspace import Workspace
@@ -74,7 +75,7 @@ def project():
 @odev.command()
 def last_used():
     """
-        Is cwd a repo folder ?
+        Output the last used workspace.
     """
     if odev.project:
         print(odev.project.last_used)
@@ -115,9 +116,12 @@ def project_create(project_path: Optional[str] = Argument(None, help=project_pat
 
 
 def set_target_workspace(workspace_name: str):
-    if click.get_current_context().parent.invoked_subcommand is None:
+    subcommand = click.get_current_context().parent.invoked_subcommand
+    if subcommand is None:
         # If it's autocomplete, don't ask interactively
         return
+    if not odev.project and subcommand != 'setup':
+        sys.exit(f"{APPNAME}: current folder holds no project.")
     if not workspace_name:
         workspace_name = tools.select_workspace("select (default=last)", odev.project)
     elif workspace_name == 'last':
@@ -398,6 +402,9 @@ def load(workspace_name: Optional[str] = WorkspaceNameArgument(default=None)):
 
 @odev.command()
 def clean(workspace_name: Optional[str] = WorkspaceNameArgument(), quiet: bool = False):
+    """
+        Git clean all repos
+    """
     for _repo_name, repo in odev.workspace and odev.workspace.repos.items():
         Git.clean(odev.paths.repo(repo), quiet=quiet)
 
@@ -516,7 +523,10 @@ def setup_requisites(
 # Git ---------------------------------------------------
 
 @odev.command()
-def status(extended: bool = True, workspace_name: Optional[str] = WorkspaceNameArgument(default='last')):
+def status(
+    extended: bool = True,
+    workspace_name: Optional[str] = WorkspaceNameArgument(default='last')
+):
     """
         Display status for all repos for current workspace.
     """
