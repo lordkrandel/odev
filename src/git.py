@@ -84,6 +84,18 @@ class Git(External):
             context.run('git diff')
 
     @classmethod
+    def diff_with_merge_base(cls, path, base_branch, target_branch="HEAD"):
+        merge_base = cls.merge_base(path, base_branch, target_branch)
+        context = invoke.Context()
+        command = f'git diff --name-only {merge_base}...{target_branch}'
+        with context.cd(path):
+            return [
+                x.strip()
+                for x in context.run(command, pty=False, hide='out').stdout.split('\n')
+                if x
+            ]
+
+    @classmethod
     def fetch(cls, path, repo_name, remote_name, branch_name):
         context = invoke.Context()
         with context.cd(path):
@@ -115,3 +127,10 @@ class Git(External):
         context = invoke.Context()
         with context.cd(path):
             context.run(f'git worktree add ../{branch} {branch}')
+
+    @classmethod
+    def merge_base(cls, path, branch1, branch2):
+        context = invoke.Context()
+        command = f'git merge-base {branch1} {branch2}'
+        with context.cd(path):
+            return context.run(command, pty=True, hide='out').stdout.strip()

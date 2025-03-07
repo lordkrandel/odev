@@ -8,6 +8,14 @@ from external import External
 class PgSql(External):
 
     @classmethod
+    def db_names(cls):
+        output = cls.run(
+            "psql -c 'SELECT datname FROM pg_database;' -d postgres -t -P pager=off",
+            hide=True, echo=False,
+        ).stdout
+        return [x.strip() for x in output.split('\n')]
+
+    @classmethod
     def dump(cls, db_name, dump_fullpath):
         ensure(Path(dump_fullpath).parent)
         return cls.run(f'pg_dump -F p -b -f {dump_fullpath} {db_name}')

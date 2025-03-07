@@ -120,8 +120,6 @@ def set_target_workspace(workspace_name: str):
         return
     if not workspace_name:
         workspace_name = tools.select_workspace("select (default=last)", odev.project)
-    elif workspace_name == 'nodefault':
-        return None
     elif workspace_name == 'last':
         workspace_name = odev.project.last_used
     else:
@@ -207,31 +205,41 @@ def workspace_bundle(
     if not (repo_names := Runbot.get_branches(bundle_name)):
         print(f"Bundle {bundle_name} not found")
         return
-    db_name = tools.input_text("What database name to use?").strip()
-    venv_path = tools.select_venv(odev.workspace)
+    base_branch = re.match(r"((?:saas-)?\d{1,2}\.\d)", bundle_name).group(0)
 
-    missing_repos = set(main_repos) - set(repo_names)
-    workspace = workspace_create(
-         ctx,
-         workspace_name=bundle_name,
-         db_name=db_name,
-         venv_path=venv_path,
-         modules_csv=None,
-         repos_csv=",".join(repo_names)
+    modules = set()
+    repos = {}
+    for repo_name in set(main_repos) | set(repo_names):
+        repo = copy.copy(template_repos[repo_name])
+        repo_path = odev.paths.project / repo_name
+        if repo_name in repo_names:
+            repo.branch = bundle_name
+            repo.remote = 'dev' if repo_name in have_dev_origin else 'origin'
+
+            Git.fetch(repo_path, repo_name, 'origin', base_branch)
+            if diffiles := Git.diff_with_merge_base(repo_path, f"origin/{base_branch}"):
+                for diffile in diffiles:
+                    if match := re.match(r"addons/([^/]+)/", diffile):
+                        modules.add(match.group(1))
+        else:
+            repo.branch = base_branch
+            repo.remote = 'origin'
+        repos[repo_name] = repo
+
+    modules_csv = ",".join(modules) if modules else None
+    workspace = tools.workspace_prepare(
+        bundle_name,
+        repos=repos,
+        modules_csv=modules_csv,
     )
     if not workspace:
         return
-    for repo_name, repo in workspace.repos.items():
-        repo.remote = 'dev' if repo_name in have_dev_origin else 'origin'
-        repo.branch = bundle_name
-    for missing_repo in missing_repos:
-        new_repo = copy.copy(template_repos[missing_repo])
-        new_repo.remote = 'origin'
-        match = re.match(r"((?:saas-)?\d{1,2}\.\d)", bundle_name)
-        new_repo.branch = match.group(0)
 
-        workspace.repos[missing_repo] = new_repo
-    workspace.save_json(odev.paths.workspace_file(workspace.name))
+    if load_workspace:
+        for repo_name, repo in repos.items():
+            _checkout_repo(repo, force_create=True)
+
+    tools.workspace_install(workspace)
     print(f"Workspace {workspace.name} has been created")
 
     if load_workspace:
@@ -302,60 +310,46 @@ def workspace_delete(workspace_name: Optional[str] = WorkspaceNameArgument(defau
 
 @odev.command()
 def workspace_create(
-        ctx: Context,
-        workspace_name: Optional[str] = WorkspaceNameArgument(default='nodefault'),
-        db_name: Optional[str] = Argument(None, help=db_name_help),
-        modules_csv: Optional[str] = Argument(None, help=modules_csv_help),
-        venv_path: Optional[str] = Argument(None, help=venv_path_help),
-        repos_csv: Optional[str] = Argument(None, help=repos_csv_help)
-    ):
+    ctx: Context,
+    workspace_name: Optional[str] = WorkspaceNameArgument(),
+    db_name: Optional[str] = Argument(None, help=db_name_help),
+    modules_csv: Optional[str] = Argument(None, help=modules_csv_help),
+    venv_path: Optional[str] = Argument(None, help=venv_path_help),
+    repos_csv: Optional[str] = Argument(None, help=repos_csv_help),
+    load_workspace: bool = True
+):
     """
         Create a new workspace from a series of selections.
     """
-    if not workspace_name:
-        workspace_name = (tools.input_text("What name for your workspace?") or '').strip()
-    if not workspace_name:
+
+    if load_workspace and not status(extended=False):
+        print("Cannot load, changes present.")
         return
-    workspace_name = tools.cleanup_colon(workspace_name)
-    if workspace_name in odev.workspaces + ['last_used']:
-        print(f"Workspace {workspace_name} is empty or already exists")
+
+    new_workspace_name = None
+    if not (workspace := tools.workspace_prepare(
+        new_workspace_name,
+        db_name,
+        venv_path,
+        repos=[template_repos[name] for name in (repos_csv or '').split(',') if name.strip()],
+        modules_csv=modules_csv,
+    )):
         return
-    if not db_name:
-        if not (db_name := (tools.input_text("What database name to use?") or '').strip()):
-            return
-    if not modules_csv:
-        modules_csv = tools.input_text("What modules to use? (CSV)").strip()
-    if not modules_csv:
-        return
-    venv_path = venv_path or tools.select_venv(odev.workspace)
 
-    if not repos_csv:
-        repos = checkout(workspace_name, force_create=True)
-        if not repos:
-            return
-    else:
-        repos = {repo_name: template_repos[repo_name] for repo_name in repos_csv.split(',')}
+    tools.workspace_install(workspace)
 
-    tools.create_workspace(workspace_name, db_name, modules_csv, repos, venv_path)
+    workspace_file = odev.paths.workspace_file(workspace.name)
+    with fileinput.FileInput(workspace_file, inplace=True, backup='.bak') as f:
+        for line in f:
+            if workspace.name in line and "branch" in line:
+                print(f'{line.rstrip()} # "{workspace.name}",')
+            elif 'remote' in line and '"dev"' not in line:
+                print(f'{line.rstrip()} # "dev",')
+            else:
+                print(line, end="")
 
-    if ctx.command.name == 'workspace-create':
-        for _repo_name, repo in repos.items():
-            _checkout_repo(repo, force_create=True)
-
-    # If this function was used as a command, also checkout the branches
-    if ctx.command.name in ('workspace-bundle', 'workspace-create'):
-        set_target_workspace(workspace_name)
-        tools.set_last_used(workspace_name)
-
-        workspace_file = odev.paths.workspace_file(workspace_name)
-        with fileinput.FileInput(workspace_file, inplace=True, backup='.bak') as f:
-            for line in f:
-                if workspace_name in line and "branch" in line:
-                    print(f'{line.rstrip()} # "{workspace_name}",')
-                elif 'remote' in line and '"dev"' not in line:
-                    print(f'{line.rstrip()} # "dev",')
-                else:
-                    print(line, end="")
+    if load_workspace:
+        load(workspace.name)
 
     return odev.workspace
 
@@ -391,7 +385,7 @@ def load(workspace_name: Optional[str] = WorkspaceNameArgument(default=None)):
     """
         Load given workspace into the session.
     """
-    if not status(extended=False):
+    if not status(extended=False, workspace_name=workspace_name):
         print("Cannot load, changes present.")
         return
 
@@ -473,7 +467,7 @@ def setup(db_name: Optional[str] = Argument(None, help="Odoo database name")):
     if not workspace_file.exists():
         print(f"Creating workspace {workspace_file}...")
         repos = {k: v for k, v in template_repos.items() if k in main_repos}
-        new_workspace = Workspace(workspace_name, db_name, repos, ['base'], 'master.dmp', 'post_hook.py', '.venv', '.odoorc')
+        new_workspace = Workspace(workspace_name, db_name, repos, ['base'])
         paths.ensure(workspace_path)
         new_workspace.save_json(workspace_file)
     else:
@@ -526,7 +520,8 @@ def status(extended: bool = True, workspace_name: Optional[str] = WorkspaceNameA
     """
         Display status for all repos for current workspace.
     """
-    print(f"{odev.project.path} - {odev.workspace.name}")
+    if extended:
+        print(f"{odev.project.path} - {odev.workspace.name}")
     for repo_name, repo in odev.workspace.repos.items():
         path = odev.paths.repo(repo)
         if not path.is_dir():
@@ -587,15 +582,16 @@ def pull(workspace_name: Optional[str] = WorkspaceNameArgument()):
 
 def _checkout_repo(repo, force_create=False):
     path = odev.paths.repo(repo)
+    target = f"{repo.name} {repo.remote}/{repo.branch}"
     try:
-        print(f"Fetching {repo.name} {repo.remote}/{repo.branch}...")
+        print(f"Fetching {target}...")
         Git.fetch(path, repo.name, repo.remote, repo.branch)
     except UnexpectedExit:
         if not force_create:
             raise
-        print(f"Creating {repo.name} {repo.remote}/{repo.branch}...")
+        print(f"Creating {target}...")
         Git.checkout(path, repo.branch, options="-B")
-    print(f"Checking out {repo.name} {repo.remote}/{repo.branch}...")
+    print(f"Checking out {target}...")
     Git.checkout(path, repo.branch)
 
 
@@ -605,7 +601,7 @@ def checkout(workspace_name: Optional[str] = WorkspaceNameArgument(default=None)
     """
         Git-checkouts multiple repositories.
     """
-    repos = (odev.workspace and odev.workspace.repos) or tools.select_repos_and_branches(odev.project, "checkout", odev.workspace)
+    repos = (odev.workspace and odev.workspace.repos)
     for repo_name, repo in repos.items():
         print(f"Checkout repo {repo_name} branch {repo.branch}...")
         _checkout_repo(repo, force_create=force_create)

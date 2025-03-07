@@ -8,16 +8,25 @@ from json_mixin import JsonMixin
 
 class Workspace(JsonMixin):
 
-    def __init__(self, name, db_name, repos, modules, db_dump_file,
-                 post_hook_script, venv_path, rc_file):
+    def __init__(
+        self,
+        name,
+        db_name,
+        repos,
+        modules,
+        db_dump_file=None,
+        post_hook_script=None,
+        venv_path=None,
+        rc_file=None,
+    ):
         self.name = name
         self.db_name = db_name
         self.repos = repos
         self.modules = modules
-        self.db_dump_file = db_dump_file
-        self.post_hook_script = post_hook_script
-        self.venv_path = venv_path
-        self.rc_file = rc_file
+        self.db_dump_file = db_dump_file or f'{name}.dmp'
+        self.post_hook_script = post_hook_script or 'post_hook.py'
+        self.venv_path = venv_path or '.venv'
+        self.rc_file = rc_file or '.odoorc'
 
     @classmethod
     def from_json(cls, data):

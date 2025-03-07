@@ -1,13 +1,15 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 from pathlib import Path
-from project import Projects, Project, TEMPLATE
-from workspace import Workspace
+
+import paths
 from git import Git
 from odev import odev
-import paths
-from templates import template_repos, main_repos, post_hook_template
+from pgsql import PgSql
+from project import Projects, Project, TEMPLATE
 from repo import Repo
+from templates import template_repos, main_repos, post_hook_template
+from workspace import Workspace
 
 import asyncio
 import consts
@@ -92,23 +94,49 @@ def cleanup_colon(name):
         return name.split(":")[1]
     return name
 
-def create_workspace(workspace_name, db_name, modules_csv, repos=None, venv_path=None):
-    repos = repos or select_repositories("checkout", workspace=None, checked=main_repos)
-    workspace = Workspace(
-        workspace_name,
-        db_name,
-        repos,
-        modules_csv.split(','),
-        f"{workspace_name}.dmp",
-        "post_hook.py",
-        venv_path,
-        '.odoorc')
-    workspace_path = odev.paths.workspace(workspace_name)
+
+def workspace_prepare(
+    workspace_name=None,
+    db_name=None,
+    venv_path=None,
+    repos=None,
+    modules_csv=None,
+    ask_modules=True,
+):
+    if not (workspace_name := (workspace_name or select_new_workspace())):
+        return
+
+    workspace_name = cleanup_colon(workspace_name)
+    if workspace_name in odev.workspaces + ['last_used']:
+        print(f"Workspace {workspace_name} is empty or already exists")
+        return
+
+    if not (db_name := db_name or select_db_name()):
+        return
+
+    venv_path = venv_path or select_venv(odev.workspace)
+
+    if not (repos := repos or select_repos_and_branches(odev.project, "checkout")):
+        return
+
+    if modules_csv:
+        modules = modules_csv.split(',')
+    elif ask_modules:
+        if not (modules_csv := select_modules()):
+            return
+        modules = modules_csv.split(',')
+    else:
+        modules = []
+
+    return Workspace(workspace_name, db_name, repos, modules, venv_path=venv_path)
+
+
+def workspace_install(workspace):
+    workspace_path = odev.paths.workspace(workspace.name)
     paths.ensure(workspace_path)
-    workspace.save_json(odev.paths.workspace_file(workspace_name))
-    with open(workspace_path / "post_hook.py", "w", encoding="utf-8") as post_hook_file:
-        post_hook_file.write(post_hook_template)
-    return repos
+    with (workspace_path / workspace.post_hook_script).open("w", encoding="utf-8") as f:
+        f.write(post_hook_template)
+    workspace.save_json(odev.paths.workspace_file(workspace.name))
 
 
 def move_workspace(workspace_name, dest_workspace_name):
@@ -128,6 +156,10 @@ def move_workspace(workspace_name, dest_workspace_name):
 
 def delete_workspace(workspace_name):
     shutil.rmtree(odev.paths.workspace(workspace_name))
+
+
+def select_new_workspace():
+    return (input_text("What name for your workspace?") or '').strip()
 
 
 def select_workspace(action, project):
@@ -189,6 +221,10 @@ def select_remote(action, remote=None, context=None):
                             context=context)
 
 
+# Modules -----------------------------------------------------
+def select_modules():
+    return (input_text("What modules to use? (CSV)") or '').strip()
+
 # Branches ----------------------------------------------------
 
 def select_branch(project, repo, action, choices=None, remote=None):
@@ -236,6 +272,9 @@ def await_all_results(coros_dict):
         return results
     return asyncio.run(await_all_result_async(coros_dict))
 
+# Database name --------------------------------------------
+def select_db_name():
+    return (select("database", "use", PgSql.db_names(), questionary.autocomplete) or '').strip()
 
 # Venv -----------------------------------------------------
 
