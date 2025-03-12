@@ -247,6 +247,7 @@ def workspace_bundle(
     print(f"Workspace {workspace.name} has been created")
 
     if load_workspace:
+        set_target_workspace(workspace.name)
         load(workspace.name)
 
 
@@ -603,6 +604,8 @@ def _checkout_repo(repo, force_create=False):
         Git.checkout(path, repo.branch, options="-B")
     print(f"Checking out {target}...")
     Git.checkout(path, repo.branch)
+    print(f"Cleaning {path}...")
+    Git.clean(path, quiet=True)
 
 
 @odev.command()
