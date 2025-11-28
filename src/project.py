@@ -61,7 +61,7 @@ class Projects(JsonMixin, dict):
     def __init__(self, projects=None, defaults=None, path=None):
         self.path = Path(path)
         self.defaults = defaults or {
-            "db_name": "odoodb",
+            "db_name": "odoo",
         }
         self.update(projects or {})
 

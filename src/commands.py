@@ -14,7 +14,7 @@ import click
 
 import paths
 import tools
-from consts import APPNAME
+from consts import APPNAME, HAVE_DEV_ORIGIN, IAP_BASE
 from env import Environment
 from external import External
 from git import Git
@@ -23,7 +23,7 @@ from odev import odev
 from pgsql import PgSql
 from rc import Rc
 from runbot import Runbot
-from templates import main_repos, post_hook_template, template_repos, have_dev_origin
+from templates import main_repos, post_hook_template, template_repos
 from typer import Argument, Context, Option
 from workspace import Workspace
 
@@ -115,13 +115,13 @@ def project_create(project_path: Optional[str] = Argument(None, help=project_pat
 # Workspace ------------------------------------------------
 
 
-def set_target_workspace(workspace_name: str):
+def set_target_workspace(workspace_name: str = None):
     subcommand = click.get_current_context().parent.invoked_subcommand
     if subcommand is None:
         # If it's autocomplete, don't ask interactively
         return
     if not odev.project and subcommand != 'setup':
-        sys.exit(f"{APPNAME}: current folder holds no project.")
+        sys.exit(f"{APPNAME}: current folder holds no projects.")
     if not workspace_name:
         workspace_name = tools.select_workspace("select (default=last)", odev.project)
     elif workspace_name == 'last':
@@ -134,6 +134,9 @@ def set_target_workspace(workspace_name: str):
             if str(odev.paths.starting).startswith(str(odev.paths.relative('') / repo_key)):
                 odev.repo = repo
                 break
+    if workspace_name not in odev.workspaces:
+        print(f"Workspace {workspace_name} not found.")
+        sys.exit(0)
     return workspace_name
 
 
@@ -162,7 +165,8 @@ def workspaces():
 
 
 @odev.command()
-def workspace(workspace_name: Optional[str] = WorkspaceNameArgument(), edit: bool = False):
+def workspace(workspace_name: Optional[str] = WorkspaceNameArgument(),
+              edit: bool = False, name: bool = False, file: bool = False):
     """
         Display currently selected workspace data.
     """
@@ -171,16 +175,20 @@ def workspace(workspace_name: Optional[str] = WorkspaceNameArgument(), edit: boo
         return
 
     workspace_file = odev.paths.workspace_file(odev.workspace.name)
-    if not edit:
+    if name:
+        print(workspace_file)
+    elif edit:
+        editor = Git.get_editor()
+        print(f"{editor} {workspace_file}")
+        External.edit(editor, workspace_file)
+    elif file:
+        print(f"{odev.paths.workspace_file(odev.workspace.name)}")
+    else:
         print(f"{odev.workspace.name}::")
         print(f"    {'project_folder:':18} {odev.project.path}")
         print(f"    {'workspace_folder:':18} {odev.paths.workspace(odev.workspace.name)}")
         print(f"    {'workspace_file:':18} {odev.paths.workspace_file(odev.workspace.name)}")
         print(odev.workspace.to_json())
-    else:
-        editor = Git.get_editor()
-        print(f"{editor} {workspace_file}")
-        External.edit(editor, workspace_file)
 
 
 @odev.command()
@@ -198,58 +206,86 @@ def workspace_set(workspace_name: Optional[str] = WorkspaceNameArgument(default=
 def workspace_bundle(
     ctx: Context,
     bundle_name: str = Argument(None, help="Bundle name"),
-    load_workspace: bool = True
+    db_name: str = Argument('odoo', help="Database name"),
 ):
     """
         Creates a workspace from a Bundle on Runbot.
         If `load` is specified, it also loads generated workspace.
     """
+    workspace_name = odev.project.last_used
+    workspace_file = odev.paths.workspace_file(workspace_name)
+    odev.workspace = Workspace.load_json(workspace_file)
+
+    repos = Workspace.load_json(workspace_file).repos
+    if not tools.check_status(repos):
+        return
 
     bundle_name = tools.cleanup_colon(bundle_name)
     if not (repo_names := Runbot.get_branches(bundle_name)):
         print(f"Bundle {bundle_name} not found")
         return
-    base_branch = re.match(r"((?:saas-)?\d{1,2}\.\d)", bundle_name).group(0)
 
-    modules = set()
+    version = tools._extract_version(bundle_name)
+    match int(version.get('major', 999)):
+        case x if x >= 19:
+            venv_path = ".venv313"
+        case x if x in range(16, 19):
+            venv_path = ".venv311"
+        case _:
+            venv_path = ".venv310"
+
+    base_branch = version['name']
+    if arbitrary_repo := next((x for x in repo_names if x in HAVE_DEV_ORIGIN), None):
+        base_branch = tools.find_base(arbitrary_repo, branch=bundle_name)
+
     repos = {}
     for repo_name in set(main_repos) | set(repo_names):
         repo = copy.copy(template_repos[repo_name])
         repo_path = odev.paths.project / repo_name
+
         if repo_name in repo_names:
             repo.branch = bundle_name
-            repo.remote = 'dev' if repo_name in have_dev_origin else 'origin'
-
-            Git.fetch(repo_path, repo_name, 'origin', base_branch)
-            if diffiles := Git.diff_with_merge_base(repo_path, f"origin/{base_branch}"):
-                for diffile in diffiles:
-                    if match := re.match(r"addons/([^/]+)/", diffile):
-                        modules.add(match.group(1))
+            repo.remote = 'dev' if repo_name in HAVE_DEV_ORIGIN else 'origin'
         else:
-            repo.branch = base_branch
+            if repo_name in HAVE_DEV_ORIGIN: 
+                repo.branch = base_branch
+            elif repo_name.lower() == 'iap-apps':
+                repo.branch = IAP_BASE
+            else:
+                repo.branch = 'master'
             repo.remote = 'origin'
         repos[repo_name] = repo
 
-    modules_csv = ",".join(modules) if modules else None
-    workspace = tools.workspace_prepare(
+    if not (workspace := tools.workspace_prepare(
         bundle_name,
+        db_name=db_name,
         repos=repos,
-        modules_csv=modules_csv,
-    )
-    if not workspace:
+        venv_path=venv_path,
+        ask_modules=False,
+    )):
         return
 
-    if load_workspace:
-        for repo_name, repo in repos.items():
-            _checkout_repo(repo, force_create=True)
+    # if not given, search for modules
+    if (search_modules := (workspace.modules == [])):
+        modules = set()
+    else:
+        modules = workspace.modules
+
+    for repo_name, repo in repos.items():
+        _checkout_repo(repo, force_create=True)
+        if search_modules and repo_name in repo_names:
+            # Search for modules from the diff
+            Git.fetch(repo_path, repo_name, 'origin', base_branch)
+            Git.fetch(repo_path, repo_name, repo.remote, repo.branch)
+            if diffiles := Git.diff_with_merge_base(repo_path, f"origin/{base_branch}", f"{repo.remote}/{repo.branch}"):
+                for diffile in diffiles:
+                    if match := re.match(r"(?:addons/)?([^/]+)/.*", diffile):
+                        modules.add(match.group(1))
+        workspace.modules = list(modules)
 
     tools.workspace_install(workspace)
-    print(f"Workspace {workspace.name} has been created")
-
-    if load_workspace:
-        set_target_workspace(workspace.name)
-        load(workspace.name)
-
+    set_target_workspace(workspace.name)
+    _switch(workspace.name)
 
 @odev.command()
 def workspace_dupe(workspace_name: Optional[str] = WorkspaceNameArgument(default=None),
@@ -328,8 +364,9 @@ def workspace_create(
     """
 
     if load_workspace and not status(extended=False):
-        print("Cannot load, changes present.")
-        return
+        if not tools.ask_reset(hard=True):
+            print("Cannot load, changes present.")
+            return
 
     new_workspace_name = None
     if not (workspace := tools.workspace_prepare(
@@ -390,14 +427,38 @@ def load(workspace_name: Optional[str] = WorkspaceNameArgument(default=None)):
     """
         Load given workspace into the session.
     """
-    if not status(extended=False, workspace_name=workspace_name):
-        print("Cannot load, changes present.")
+    _switch(workspace_name)
+
+
+@odev.command()
+def reset(hard: bool = True):
+    """
+        Git reset on all workspaces, hard by default
+    """
+    if not odev.project:
+        sys.exit("Project not found in folder")
+    workspace_file = odev.paths.workspace_file(odev.project.last_used)
+    repos = Workspace.load_json(workspace_file).repos
+    tools.async_sequence(repos, promises=[
+        Git.reset_async,
+    ])
+
+def _switch(workspace_name):
+    workspace_file = odev.paths.workspace_file(workspace_name)
+    repos = Workspace.load_json(workspace_file).repos
+    if not tools.check_status(repos):
         return
 
-    set_target_workspace(workspace_name)
-    checkout(workspace_name)
-    clean(workspace_name, quiet=True)
-
+    last_used = odev.project.last_used
+    print(f"{last_used} -> {workspace_name} (updated)...")
+    tools.async_sequence(repos, promises=[
+        Git.fetch_async,
+        Git.reset_async,
+        Git.clean_async,
+        Git.checkout_async,
+        Git.clean_async,
+        Git.pull_async,
+    ])
     tools.set_last_used(workspace_name)
 
 
@@ -460,8 +521,11 @@ def setup(db_name: Optional[str] = Argument(None, help="Odoo database name")):
 
         if not list(clone_path.glob("*")):
             print(f"cloning {repo_name} in {clone_path}...")
-            Git.clone(repo.origin, repo.branch, clone_path)
-            Git.add_remote('dev', repo.dev, clone_path)
+            origin_url = 'git@github.com:odoo/{repo.name}.git'
+            Git.clone(origin_url, repo.branch, clone_path)
+            if repo in have_dev_origin:
+                dev_url = 'git@github.com:odoo/{repo.name}-dev.git'
+                Git.add_remote('dev', dev_url, clone_path)
 
         setup_requisites(odev.paths.relative('.venv'),
                          added_csv='ipython,pylint',
@@ -521,7 +585,44 @@ def setup_requisites(
             env.context.run(f"pip install --upgrade {module}")
 
 
+# Cache -------------------------------------------------
+
+@odev.command()
+def update_merge_base_cache(
+    workspace_name: Optional[str] = WorkspaceNameArgument()
+):
+    """
+        Update the merge base cache
+    """
+    versions = odev.project.merge_cache.versions
+    repos = {
+        repo_name: repo
+        for repo_name, repo in odev.workspace.repos.items()
+        if repo_name in HAVE_DEV_ORIGIN
+    }
+    tasks = {
+        f'{repo_name}/{version}': (Git.fetch_async, (repo_path, repo.name, repo.remote, version))
+        for version in versions
+        for repo_name, repo in repos.items()
+        if (repo_path := odev.paths.repo(repo))
+    }
+    tools.await_all_results(tasks)
+    tasks = {
+        f'{repo_name}/{version}': (Git.merge_base_async, (repo_path, 'origin/master', f'origin/{version}'))
+        for repo_name, repo in repos.items()
+        for version in versions
+        if (repo_path := odev.paths.repo(repo))
+    }
+    results = tools.await_all_results(tasks)
+    for key, merge_base in results.items():
+        repo, version = key.split('/')
+        merge_base = merge_base.decode().rstrip()
+        getattr(odev.project.merge_cache, repo)[merge_base] = version
+    odev.project.merge_cache.save_json(odev.paths.cache)
+
+
 # Git ---------------------------------------------------
+
 
 @odev.command()
 def status(
@@ -576,7 +677,7 @@ def fetch(origin: bool = False, workspace_name: Optional[str] = WorkspaceNameArg
         path = odev.paths.repo(repo)
         if origin:
             Git.fetch(path, repo_name, "origin", "")
-        else:
+    else:
             Git.fetch(path, repo_name, repo.remote, repo.branch)
 
 
@@ -608,6 +709,22 @@ def _checkout_repo(repo, force_create=False):
     Git.clean(path, quiet=True)
 
 
+
+@odev.command()
+def update(ctx: Context, workspace_name: Optional[str] = WorkspaceNameArgument()):
+    """
+        Updates given workspace and reloads the current one.
+        With asynchronous methods.
+    """
+    last_used = odev.project.last_used
+    _switch(workspace_name)
+    if last_used:
+        last_workspace_file = odev.paths.workspace_file(last_used)
+        last_repos = Workspace.load_json(last_workspace_file).repos
+        tools.async_sequence(last_repos, promises=[Git.checkout_async])
+        tools.set_last_used(workspace_name)
+
+
 @odev.command()
 def checkout(workspace_name: Optional[str] = WorkspaceNameArgument(default=None),
              force_create: bool = False):
@@ -619,21 +736,6 @@ def checkout(workspace_name: Optional[str] = WorkspaceNameArgument(default=None)
         print(f"Checkout repo {repo_name} branch {repo.branch}...")
         _checkout_repo(repo, force_create=force_create)
     return repos
-
-
-@odev.command()
-def update(ctx: Context, workspace_name: Optional[str] = WorkspaceNameArgument()):
-    """
-        Updates given workspace and reloads the current one.
-    """
-    last_used = odev.project.last_used
-    repos = checkout(workspace_name)
-    for repo_name, repo in repos.items():
-        print(f"Updating repo {repo_name}...")
-        Git.pull(odev.paths.repo(repo), repo.remote, repo.branch)
-
-    set_target_workspace(last_used)
-    load(last_used)
 
 
 # Files  ------------------------------------------------------------
@@ -720,32 +822,51 @@ def db_restore(workspace_name: Optional[str] = WorkspaceNameArgument()):
 
 @odev.command()
 def upgrade(old_workspace_name: str = Argument(help="Repository to be upgraded"),
-            workspace_name: Optional[str] = WorkspaceNameArgument()):
+            workspace_name: Optional[str] = WorkspaceNameArgument(),
+            test: bool = False, test_upgrade: bool = False, hook: bool = False):
     """
         Run upgrade from a old Workspace to a new Workspace
-        ex. ocli upgrade 15.0 15.0-account-myfix
+        ex. ocli upgrade 19.0 19.0-account-myfix-tag
     """
 
     if not status(extended=False):
         print("Cannot upgrade, changes present.")
         return
 
+    assert 'upgrade' in odev.workspace.repos
+    assert 'upgrade-util' in odev.workspace.repos
+
     odoo_path = odev.paths.repo(odev.workspace.repos['odoo'])
     upgrade_path = odev.paths.repo(odev.workspace.repos['upgrade']) / 'migrations'
     upgrade_util_path = odev.paths.repo(odev.workspace.repos['upgrade-util']) / 'src'
-    upgrade_options = f'--upgrade-path={upgrade_util_path},{upgrade_path} -u all --test-enable --test-tags=at_install,-post_install'
 
     print(f"Upgrading {old_workspace_name} -> {workspace_name}")
     print(f"Loading {old_workspace_name}...")
     load(old_workspace_name)
-    db_init(old_workspace_name, demo=True, stop=True, post_init_hook=False)
+    test_str = ""
+    if test or test_upgrade:
+        test_str = "--test-enable --test-tags=upgrade.test_prepare"
+    db_init(old_workspace_name, demo=True, stop=True, post_init_hook=hook, options=test_str)
+
+    db_dump()
 
     print(f"Loading {workspace_name}...")
     load(workspace_name)
     print("Cleaning old folders that might have old files")
     Git.clean(odoo_path, quiet=True)
 
-    start(odoo_path, options=upgrade_options, demo=True)
+    test_str = ""
+    if test or test_upgrade:
+        test_str = "--test-enable --test-tags="
+        test_tags = []
+        if test_upgrade:
+            test_tags.append("upgrade.test_check")
+        if test:
+            test_tags.append("at_install")
+            test_tags.append("-post_install")
+        test_str += ",".join(test_tags)
+    upgrade_options = f'--upgrade-path={upgrade_util_path},{upgrade_path} {test_str} -u all'
+    start(odoo_path, options=upgrade_options, demo=True, fast=True, stop=True)
 
 
 @odev.command()

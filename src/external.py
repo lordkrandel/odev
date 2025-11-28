@@ -14,7 +14,7 @@ class External:
 
     @classmethod
     def edit(cls, editor, target, pty=True, hide=None, echo=False):
-        return cls.run(f"{editor} {target}", pty, hide, echo)
+        return cls.run(f"{editor} {target}", pty=pty, hide=hide, echo=echo)
 
     @classmethod
     def which(cls, name):

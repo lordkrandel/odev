@@ -15,7 +15,7 @@ class Odoo(External):
         print(f"{80 * '-'}")
         print("Odoo starting...")
         print(f"    Odoo path: {bin_path}/odoo-bin")
-        print(f"    Database: {rc.db_name}")
+        # print(f"    Database: {rc.db_name}")
         print(f"    Addons: {rc._addons(base_path)}")
         print(f"    Virtualenv: {Path(venv_path).relative_to(base_path)}")
         if modules:
@@ -31,7 +31,7 @@ class Odoo(External):
 
     @classmethod
     def get_demo_option(cls, demo):
-        return not demo and "--without-demo=1" or ""
+        return not demo and "--without-demo=1" or "--without-demo=0"
 
     @classmethod
     def start(cls, bin_path, rc_fullpath, venv_path, modules, options=None, mode=None, pty=False, demo=False, stop=False, in_stream=None, env_vars=None):

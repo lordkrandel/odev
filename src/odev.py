@@ -1,13 +1,14 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import consts
+from merge_cache import MergeCache
 from pathlib import Path
 from paths import digest, parent_digests
 from project import Projects
 from typer import Typer
 
-
 class Odev(Typer):
+
     def __init__(self, *args, **kwargs):
         super(Odev, self).__init__(*args, **kwargs)
         self.workspace = None
@@ -18,7 +19,11 @@ class Odev(Typer):
         self.projects.save()
         if self.setup_current_project():
             self.setup_variable_paths()
-            self.workspaces = sorted([x.name for x in self.paths.workspaces.iterdir()])
+            self.project.merge_cache = MergeCache.load_json(self.paths.cache)
+            self.reload_workspaces()
+
+    def reload_workspaces(self):
+        self.workspaces = sorted([x.name for x in self.paths.workspaces.iterdir()])
 
     def setup_fixed_paths(self):
         class Paths:
@@ -42,8 +47,9 @@ class Odev(Typer):
         self.paths.relative = lambda x: self.paths.project / x
         self.paths.repo = lambda repo: self.paths.relative(repo.name)
         self.paths.workspaces = self.paths.config / 'workspaces' / digest(self.paths.project)
+        self.paths.cache = self.paths.workspaces / "cache.json"
         self.paths.workspace = lambda name: self.paths.workspaces / name
-        self.paths.workspace_file = lambda name: self.paths.workspace(name) / Path(f"{name}.json")
-        self.paths.hook_file = lambda name: self.paths.workspace(name) / Path("post_hook.py")
+        self.paths.workspace_file = lambda name: self.paths.workspace(name) / f"{name}.json"
+        self.paths.hook_file = lambda name: self.paths.workspace(name) / "post_hook.py"
 
 odev = Odev(rich_markup_mode=False)

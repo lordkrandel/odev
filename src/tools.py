@@ -16,8 +16,22 @@ import consts
 from datetime import datetime
 import questionary
 import shutil
+import re
 import sys
 
+
+yeslike = [1, "s", "y", "si", "yes", "true"]
+nolike = [0, "n", "no", "false"]
+
+def strtobool(value):
+    lowered = (value or '').lower()
+    if lowered == '':
+        return 'default'
+    if lowered in yeslike:
+        return True
+    if lowered in nolike:
+        return False
+    return None
 
 custom_style = questionary.Style.from_dict({
     "completion-menu": "bg:#222222",
@@ -95,6 +109,23 @@ def cleanup_colon(name):
     return name
 
 
+def _extract_version(branch_name):
+    base = (
+        re.match(r"(?P<name>(?P<major>\d{1,2}).(?P<minor>\d))", branch_name)
+        or re.match(r"(?P<name>saas-(?P<major>\d{1,2}).(?P<minor>\d))", branch_name)
+        or re.match(r"(?P<name>master)", branch_name)
+    )
+    return base.groupdict() if base else None
+
+
+def find_base(repo_name, branch):
+    from templates import have_dev_origin
+    fallback = _extract_version(repo_name)
+    arbitrary_path = odev.paths.project / repo_name
+    remote = 'dev' if repo_name in have_dev_origin else 'origin'
+    bundle_merge_base = Git.merge_base(arbitrary_path, 'master', f'{remote}/{branch}')
+    return odev.project.merge_cache.get(repo_name, {}).get(bundle_merge_base, fallback)
+
 def workspace_prepare(
     workspace_name=None,
     db_name=None,
@@ -111,19 +142,13 @@ def workspace_prepare(
         print(f"Workspace {workspace_name} is empty or already exists")
         return
 
-    if not (db_name := db_name or select_db_name()):
-        return
-
+    db_name = db_name or select_db_name()
     venv_path = venv_path or select_venv(odev.workspace)
 
     if not (repos := repos or select_repos_and_branches(odev.project, "checkout")):
         return
 
-    if modules_csv:
-        modules = modules_csv.split(',')
-    elif ask_modules:
-        if not (modules_csv := select_modules()):
-            return
+    if modules_csv or ask_modules and (modules_csv := select_modules()):
         modules = modules_csv.split(',')
     else:
         modules = []
@@ -137,6 +162,7 @@ def workspace_install(workspace):
     with (workspace_path / workspace.post_hook_script).open("w", encoding="utf-8") as f:
         f.write(post_hook_template)
     workspace.save_json(odev.paths.workspace_file(workspace.name))
+    odev.reload_workspaces()
 
 
 def move_workspace(workspace_name, dest_workspace_name):
@@ -210,7 +236,7 @@ def select_repository(action, workspace=None, repo_names=None):
     repo_name = select("repository", action, repo_choices, select_function=questionary.select)
     if repo_name:
         repo = repo_choices[repo_name]
-        return Repo(repo.name, repo.dev, repo.origin, repo.remote, repo.branch, repo.addons_folders)
+        return Repo(repo.name, repo.remote, repo.branch, repo.addons_folders)
 
 
 # Remotes -----------------------------------------------------
@@ -240,7 +266,7 @@ def select_branch(project, repo, action, choices=None, remote=None):
         qmark=consts.QMARK
     ).ask()
     if branch:
-        return Repo(repo.name, repo.dev, repo.origin, remote, branch, repo.addons_folders)
+        return Repo(repo.name, remote, branch, repo.addons_folders)
 
 
 # Async ------------------------------------------------------
@@ -252,7 +278,7 @@ def await_first_result(coros_dict):
             done, unfinished = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for task in done:
                 ret = task.result().join()
-                if ret.ok:
+                if ret.retcode == 0:
                     for unfinished_task in unfinished:
                         unfinished_task.cancel()
                     await asyncio.wait(tasks)
@@ -260,21 +286,71 @@ def await_first_result(coros_dict):
             tasks = unfinished
     return asyncio.run(await_first_result_async(coros_dict))
 
+
+async def await_all_results_async(coros_dict):
+    tasks = {name: asyncio.create_task(func(*args), name=name) for name, (func, args) in coros_dict.items()}
+    results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+    final_results = {}
+    for task, ret in zip(tasks.values(), results):
+        if isinstance(ret, Exception):
+            # Optionally log errors
+            print(f"Task {task.get_name()} failed: {ret}")
+            continue
+        if ret.returncode == 0:
+            final_results[task.get_name()] = ret.stdout
+    return final_results
+
 def await_all_results(coros_dict):
-    async def await_all_result_async(coros_dict):
-        results = {}
-        tasks = [asyncio.create_task(coro, name=name) for name, coro in coros_dict.items()]
-        done, dummy = await asyncio.wait(tasks)
-        for task in done:
-            ret = task.result().join()
-            if ret.ok:
-                results[task.get_name()] = ret.stdout
-        return results
-    return asyncio.run(await_all_result_async(coros_dict))
+    return asyncio.run(await_all_results_async(coros_dict))
+
+def async_sequence(repos, promises, indent=4):
+    async def _runner():
+        tasks = (
+            asyncio.create_task(
+                _sequence(repo, horizontal_position=idx))
+            for idx, (repo_name, repo) in enumerate(repos.items())
+        )
+        return await asyncio.wait(tasks)
+
+    def get_args(method, path, repo):
+        match method:
+            case Git.fetch_async:
+                return (path, repo.name, repo.remote, repo.branch)
+            case Git.reset_async:
+                return (path, True)
+            case Git.clean_async:
+                return (path, )
+            case Git.checkout_async:
+                return (path, repo.branch)
+            case Git.pull_async:
+                return (path, repo.remote, repo.branch)
+
+    async def _sequence(repo, horizontal_position):
+        for method in promises:
+            path = odev.paths.repo(repo)
+            args = get_args(method, path, repo)
+
+            args_str = ' '.join([str(arg) for arg in args[1:]])
+            operation = re.sub("_async$", "", method.__name__)
+            indent_str = ' ' * horizontal_position * indent
+            print(f"{indent_str}({path.name}) {operation} {args_str}")
+
+            ret = await method(*get_args(method, path, repo))
+            if ret.returncode != 0:
+                print(ret.stderr.decode())
+                return
+    return asyncio.run(_runner())
+
 
 # Database name --------------------------------------------
 def select_db_name():
-    return (select("database", "use", PgSql.db_names(), questionary.autocomplete) or '').strip()
+    return select(
+        "database",
+        "use",
+        PgSql.db_names(),
+        questionary.autocomplete,
+        default=odev.projects.defaults['db_name'],
+    )
 
 # Venv -----------------------------------------------------
 
@@ -284,6 +360,29 @@ def select_venv(workspace):
         select("venv", "select", venvs, questionary.autocomplete)
         or workspace.venv_path
     )
+
+
+# Ask reset -------------------------------------------------
+
+def check_status(repos):
+    for repo_name, repo in repos.items():
+        path = odev.paths.repo(repo)
+        ret = Git.status(path, extended=False, name=repo.name)
+        if ret.stdout:
+            answer = strtobool(input_text("Do you wanna reset all changes? (Y/n)"))
+            if answer not in (True, 'default'):
+                print("Cannot load, changes present.")
+                return False
+            return True
+    return True
+
+def ask_reset(hard=False):
+    if strtobool(input_text("Do you wanna reset all changes? (Y/n)")) in (True, 'default'):
+        for repo_name, repo in odev.workspace.repos.items():
+            path = odev.paths.repo(repo)
+            Git.reset(path, hard=hard)
+        return True
+    return False
 
 
 # Questionary helpers --------------------------------------
@@ -296,15 +395,31 @@ def checkbox(subject, action, choices):
     return select(subject, action, choices, questionary.checkbox)
 
 
-def select(subject, action, choices, select_function=questionary.rawselect, context=None):
+def select(
+    subject,
+    action,
+    choices,
+    select_function=questionary.rawselect,
+    context=None,
+    default=None
+):
     prefix = f"{context} > " if context else ''
-    result = select_function(f"{prefix}Which {subject} do you want to {action}?",
-                           choices=choices,
-                           style=custom_style,
-                           qmark=consts.QMARK).ask()
+    default_str = f" ({default})" if default else ''
+    result = select_function(
+        f"{prefix}Which {subject} do you want to {action}?{default_str}",
+        choices=choices,
+        style=custom_style,
+        qmark=consts.QMARK,
+    ).ask()
     if result is None:
         sys.exit(1)
-    return result or []
+    elif result == '' and default:
+        return default
+    elif result and isinstance(result, str):
+        result = result.strip()
+    elif result and isinstance(result, tuple | list):
+        result = [x.strip() for x in result]
+    return result
 
 
 def confirm(action):

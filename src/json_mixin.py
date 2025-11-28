@@ -22,8 +22,14 @@ class JsonMixin:
         return cls(**data)
 
     def to_json(self):
-        data = {k: v.to_json() if isinstance(v, JsonMixin) else str(v)
-                for k, v in self.__dict__.items()}
+        data = {k: y
+            for k, v in self.__dict__.items()
+            if (
+                (isinstance(v, JsonMixin) and (y := v.to_json()))
+                or (isinstance(v, dict | list) and (y := v))
+                or (y := str(v))
+            )
+        }
         return json.dumps(data, indent=4)
 
     def save_json(self, fullpath):

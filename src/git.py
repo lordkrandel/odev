@@ -1,19 +1,47 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 # ruff: noqa: T201
 
+import asyncio
 import invoke
+from collections import namedtuple
 from external import External
-from pathlib import Path
 import re
 
-
+AsyncProc = namedtuple('AsyncProc', ['returncode', 'stdout', 'stderr'])
 class Git(External):
 
     @classmethod
-    def clean(cls, folder='.', quiet=False):
+    async def git_async(cls, args, path):
+        proc = await asyncio.create_subprocess_exec(
+            'git', *args,
+            cwd=path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        status_code = await proc.wait()
+        stdout, stderr = await proc.communicate()
+        return AsyncProc(status_code, stdout, stderr)
+
+    @classmethod
+    async def clean_async(cls, path='.'):
+        return await cls.git_async(['clean', '-xdfq'], path)
+
+    @classmethod
+    def clean(cls, path='.', quiet=False):
         context = invoke.Context()
-        with context.cd(folder):
-            context.run(f'git clean -xdf{"q" if quiet else ""}')
+        with context.cd(path):
+            return context.run(f'git clean -xdf{"q" if quiet else ""}')
+
+    @classmethod
+    async def reset_async(cls, path='.', hard=False):
+        return await cls.git_async(['reset'] + (['--hard'] if hard else []), path)
+
+    @classmethod
+    def reset(cls, path='.', hard=False, quiet=False):
+        context = invoke.Context()
+        hard_str = '--hard ' if hard else ''
+        with context.cd(path):
+            return context.run(f"git reset {hard_str}")
 
     @classmethod
     def get_editor(cls):
@@ -21,13 +49,13 @@ class Git(External):
 
     @classmethod
     def clone(cls, repository, branch, directory):
-        cls.run(f'git clone --branch {branch} --single-branch {repository} {directory}')
+        return cls.run(f'git clone --branch {branch} --single-branch {repository} {directory}')
 
     @classmethod
     def add_remote(cls, name, url, path):
         context = invoke.Context()
         with context.cd(path):
-            context.run(f'git remote add {name} {url}')
+            return context.run(f'git remote add {name} {url}')
 
     @classmethod
     def status(cls, path, extended=False, name=False):
@@ -45,7 +73,11 @@ class Git(External):
     def stash(cls, path):
         context = invoke.Context()
         with context.cd(path):
-            context.run('git stash -a')
+            return context.run('git stash -a')
+
+    @classmethod
+    async def checkout_async(cls, path, branch, options=None):
+        return await cls.git_async(['checkout', '--progress'] + (options or []) + [branch], path=path)
 
     @classmethod
     def checkout(cls, path, branch, options=None):
@@ -53,7 +85,7 @@ class Git(External):
         with context.cd(path):
             current_branch = cls.get_current_branch(path)
             if branch != current_branch:
-                context.run('git checkout --progress %s %s' % (options or '', branch))
+                return context.run('git checkout --progress %s %s' % (options or '', branch))
 
     @classmethod
     def get_current_branch(cls, path):
@@ -81,7 +113,7 @@ class Git(External):
         context = invoke.Context()
         with context.cd(path):
             print(f'{repo_name}:: {"-" * (80 - len(repo_name))}')
-            context.run('git diff')
+            return context.run('git diff')
 
     @classmethod
     def diff_with_merge_base(cls, path, base_branch, target_branch="HEAD"):
@@ -96,37 +128,40 @@ class Git(External):
             ]
 
     @classmethod
-    def fetch(cls, path, repo_name, remote_name, branch_name):
+    async def fetch_async(cls, path, repo_name, remote_name, branch_name):
+        return await cls.git_async(
+            ['fetch', '--progress', '--verbose', remote_name, branch_name],
+            path=path
+        )
+
+    @classmethod
+    def fetch(cls, path, repo_name, remote_name, branch_name, options=None):
         context = invoke.Context()
         with context.cd(path):
-            context.run('git fetch --progress --verbose %s %s' % (remote_name, branch_name))
+            command = f"git fetch --progress --verbose {remote_name} {branch_name} {options or ''}"
+            return context.run(command)
 
     @classmethod
     def push(cls, path, force=False):
         context = invoke.Context()
         with context.cd(path):
-            context.run(f'git push {"-ff" if force else ""}')
+            return context.run(f'git push {"-ff" if force else ""}')
 
     @classmethod
     def pull(cls, path, remote, branch_name):
         context = invoke.Context()
         with context.cd(path):
-            context.run(f'git pull {remote} {branch_name}')
+            return context.run(f'git pull {remote} {branch_name}')
 
     @classmethod
-    def update_master_branch(cls, base_path, repo_name):
-        path = Path(base_path) / repo_name
-        cls.fetch(base_path, repo_name, 'origin', 'master')
-        context = invoke.Context()
-        with context.cd(path):
-            context.run('git checkout --progress master')
-        cls.pull(path, 'origin', 'master')
+    async def pull_async(cls, path, remote, branch_name):
+        return await cls.git_async(['pull', remote, branch_name], path=path)
 
     @classmethod
     def worktree_add(cls, branch, path, new=False):
         context = invoke.Context()
         with context.cd(path):
-            context.run(f'git worktree add ../{branch} {branch}')
+            return context.run(f'git worktree add ../{branch} {branch}')
 
     @classmethod
     def merge_base(cls, path, branch1, branch2):
@@ -134,3 +169,22 @@ class Git(External):
         command = f'git merge-base {branch1} {branch2}'
         with context.cd(path):
             return context.run(command, pty=True, hide='out').stdout.strip()
+
+    @classmethod
+    async def merge_base_async(cls, path, branch1, branch2):
+        return await cls.git_async(['merge-base', branch1, branch2], path=path)
+
+    @classmethod
+    def all_remote_branches(cls, path, remote, filter_func=None):
+        context = invoke.Context()
+        command = f"git ls-remote --heads {remote} 'refs/heads/??.?' 'refs/heads/saas-??.?'"
+        pattern = r'.*refs/heads/(?P<version>(?:saas-)?(?P<number>\d\d\.\d))$'
+        with context.cd(path):
+            versions_lines = context.run(command, pty=True, hide='out').stdout.strip()
+        versions = {}
+        for line in (x.strip() for x in versions_lines.splitlines()):
+            if version_data := re.match(pattern, line).groupdict():
+                number = float(version_data.get('number'))
+                if not filter_func or filter_func(number):
+                    versions[number] = version_data.get('version')
+        return [x[1] for x in sorted(versions.items())]
