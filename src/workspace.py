@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from repo import Repo
 from json_mixin import JsonMixin
+from templates import addons_path, upgrade_path
 
 
 class Workspace(JsonMixin):
@@ -18,6 +19,7 @@ class Workspace(JsonMixin):
         post_hook_script=None,
         venv_path=None,
         rc_file=None,
+        extra_config=None,
     ):
         self.name = name
         self.db_name = db_name
@@ -27,6 +29,29 @@ class Workspace(JsonMixin):
         self.post_hook_script = post_hook_script or 'post_hook.py'
         self.venv_path = venv_path or '.venv'
         self.rc_file = rc_file or '.odoorc'
+        self.extra_config = extra_config or {}
+        self.path = None
+
+    @property
+    def addons_path(self):
+        return {
+            Path(repo_name) / path
+            for repo_name in self.repos
+            for path in addons_path.get(repo_name, [])
+        }
+
+    def set_path(self, path):
+        self.path = str(path)
+        for repo_name in self.repos:
+            self.repos[repo_name].path = str(Path(self.path) / repo_name)
+
+    @property
+    def upgrade_path(self):
+        return {
+            Path(repo_name) / path
+            for repo_name in self.repos
+            for path in upgrade_path.get(repo_name, [])
+        }
 
     @classmethod
     def from_json(cls, data):
@@ -42,16 +67,12 @@ class Workspace(JsonMixin):
             data.get('db_dump_file', ''),
             data.get('post_hook_script', ''),
             data.get('venv_path', ''),
-            data.get('rc_file', ''))
+            data.get('rc_file', ''),
+            data.get('extra_config', ''),
+        )
 
-    def to_json(self):
-        data = self.__dict__.copy()
-        for k, v in data.items():
-            if k == 'repos':
-                data[k] = {k2: v2.__dict__ for k2, v2 in v.items()}
-            else:
-                data[k] = v
-        return json.dumps(data, indent=4)
+    def to_json_excluded(self):
+        return ['path'] + super().to_json_excluded()
 
     def set_current(self, project_path):
         """ Set the workspace as current """

@@ -23,8 +23,8 @@ class Git(External):
         return AsyncProc(status_code, stdout, stderr)
 
     @classmethod
-    async def clean_async(cls, path='.'):
-        return await cls.git_async(['clean', '-xdfq'], path)
+    async def clean_async(cls, path='.', quiet=False):
+        return await cls.git_async(['clean', f'-xdf{"q" if quiet else ""}'], path)
 
     @classmethod
     def clean(cls, path='.', quiet=False):
@@ -70,10 +70,10 @@ class Git(External):
                 return context.run('git status -s', pty=True, hide='out')
 
     @classmethod
-    def stash(cls, path):
-        context = invoke.Context()
-        with context.cd(path):
-            return context.run('git stash -a')
+    def stash(cls, path, message=None):
+        message = f"-m '{message}'" if message else ''
+        path_str = f"-- {path}" if path else ''
+        return invoke.Context().run(f"git stash -a {message} {path_str}")
 
     @classmethod
     async def checkout_async(cls, path, branch, options=None):

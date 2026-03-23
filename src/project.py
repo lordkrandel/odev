@@ -18,19 +18,13 @@ TEMPLATE = """{
     "repos": {:
         "odoo": {
             "name": "odoo",
-            "dev": "git@github.com:odoo-dev/odoo",
-            "origin": "git@github.com:odoo/odoo",
             "remote": "origin",
-            "branch": "master",
-            "addons_folders": ["./addons"]
+            "branch": "master"
         },
         "enterprise": {
             "name": "enterprise",
-            "dev": "git@github.com:odoo-dev/enterprise",
-            "origin": "git@github.com:odoo/enterprise",
             "remote": "origin",
-            "branch": "master",
-            "addons_folders": ["."]
+            "branch": "master"
         }
     }
 }"""

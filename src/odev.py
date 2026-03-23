@@ -19,7 +19,7 @@ class Odev(Typer):
         self.projects.save()
         if self.setup_current_project():
             self.setup_variable_paths()
-            self.project.merge_cache = MergeCache.load_json(self.paths.cache)
+            self.merge_cache = MergeCache.load_json(self.paths.cache)
             self.reload_workspaces()
 
     def reload_workspaces(self):
@@ -45,7 +45,7 @@ class Odev(Typer):
     def setup_variable_paths(self):
         self.paths.project = Path(self.project.path)
         self.paths.relative = lambda x: self.paths.project / x
-        self.paths.repo = lambda repo: self.paths.relative(repo.name)
+        self.paths.repo = lambda repo_name: self.paths.relative(repo_name)
         self.paths.workspaces = self.paths.config / 'workspaces' / digest(self.paths.project)
         self.paths.cache = self.paths.workspaces / "cache.json"
         self.paths.workspace = lambda name: self.paths.workspaces / name

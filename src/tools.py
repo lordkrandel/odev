@@ -4,11 +4,12 @@ from pathlib import Path
 
 import paths
 from git import Git
+import pl
 from odev import odev
 from pgsql import PgSql
 from project import Projects, Project, TEMPLATE
 from repo import Repo
-from templates import template_repos, main_repos, post_hook_template
+from templates import template_repos, main_repos, origins, post_hook_template
 from workspace import Workspace
 
 import asyncio
@@ -64,14 +65,6 @@ def select_project(action, project_name=None):
             return []
     return odev.projects.get(project_name, [])
 
-def delete_project(project_name):
-    projects = Projects.load(odev.paths.projects)
-    if project_name not in projects:
-        msg = f"{project_name} is not a valid project"
-        raise ValueError(msg)
-    projects.pop(project_name)
-    projects.save_json(odev.paths.projects)
-
 def create_project(path, db_name=None):
     """
         Create a new project, path, and its 'master' workspace.
@@ -117,14 +110,23 @@ def _extract_version(branch_name):
     )
     return base.groupdict() if base else None
 
+def get_venv_path(version):
+    match int(version.get('major', 999)):
+        case x if x >= 19:
+            return ".venv313"
+        case x if x in range(16, 19):
+            return ".venv311"
+        case _:
+            return ".venv310"
 
 def find_base(repo_name, branch):
-    from templates import have_dev_origin
-    fallback = _extract_version(repo_name)
+    fallback = _extract_version(branch)['name']
     arbitrary_path = odev.paths.project / repo_name
+    have_dev_origin = [k for k, v in origins.items() if 'dev' in v]
     remote = 'dev' if repo_name in have_dev_origin else 'origin'
+    Git.fetch(arbitrary_path, repo_name, remote, branch)
     bundle_merge_base = Git.merge_base(arbitrary_path, 'master', f'{remote}/{branch}')
-    return odev.project.merge_cache.get(repo_name, {}).get(bundle_merge_base, fallback)
+    return getattr(odev.merge_cache, repo_name, {}).get(bundle_merge_base, fallback)
 
 def workspace_prepare(
     workspace_name=None,
@@ -203,16 +205,8 @@ def select_workspace(action, project):
 def select_repos_and_branches(project, action, workspace=None):
     repos = {}
     for repo_name, repo in select_repositories(action, workspace, checked=main_repos).items():
-        repos[repo_name] = select_branch(project, repo, action)
+        repos[repo_name] = select_branch(project, repo_name, action)
     return repos
-
-
-def select_repo_and_branch(project, action, workspace=None):
-    repo = select_repository(action, workspace)
-    if repo and not workspace:
-        return select_branch(project, repo, action)
-    else:
-        return repo
 
 
 # Repositories -----------------------------------------------
@@ -236,7 +230,7 @@ def select_repository(action, workspace=None, repo_names=None):
     repo_name = select("repository", action, repo_choices, select_function=questionary.select)
     if repo_name:
         repo = repo_choices[repo_name]
-        return Repo(repo.name, repo.remote, repo.branch, repo.addons_folders)
+        return repo_name, Repo(repo.remote, repo.branch)
 
 
 # Remotes -----------------------------------------------------
@@ -253,12 +247,12 @@ def select_modules():
 
 # Branches ----------------------------------------------------
 
-def select_branch(project, repo, action, choices=None, remote=None):
+def select_branch(project, repo_name, action, choices=None, remote=None):
     if not choices:
-        remote = select_remote(action, remote, context=repo.name)
-        path = odev.paths.repo(repo)
+        remote = select_remote(action, remote, context=repo_name)
+        path = odev.paths.repo(repo_name)
         choices = Git.get_remote_branches(path, remote)
-    prefix = f"{repo.name} > " if not remote else f"{repo.name}/{remote} > "
+    prefix = f"{repo_name} > " if not remote else f"{repo_name}/{remote} > "
     branch = questionary.autocomplete(
         f"{prefix}Which branch do you want to {action}?",
         choices=choices,
@@ -266,56 +260,47 @@ def select_branch(project, repo, action, choices=None, remote=None):
         qmark=consts.QMARK
     ).ask()
     if branch:
-        return Repo(repo.name, remote, branch, repo.addons_folders)
+        return Repo(remote, branch)
 
 
 # Async ------------------------------------------------------
 
-def await_first_result(coros_dict):
-    async def await_first_result_async(coros_dict):
-        tasks = [asyncio.create_task(coro, name=name) for name, coro in coros_dict.items()]
-        while tasks:
-            done, unfinished = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            for task in done:
-                ret = task.result().join()
-                if ret.retcode == 0:
-                    for unfinished_task in unfinished:
-                        unfinished_task.cancel()
-                    await asyncio.wait(tasks)
-                    return task.get_name(), ret.stdout
-            tasks = unfinished
-    return asyncio.run(await_first_result_async(coros_dict))
-
-
-async def await_all_results_async(coros_dict):
-    tasks = {name: asyncio.create_task(func(*args), name=name) for name, (func, args) in coros_dict.items()}
-    results = await asyncio.gather(*tasks.values(), return_exceptions=True)
-    final_results = {}
-    for task, ret in zip(tasks.values(), results):
-        if isinstance(ret, Exception):
-            # Optionally log errors
-            print(f"Task {task.get_name()} failed: {ret}")
-            continue
-        if ret.returncode == 0:
-            final_results[task.get_name()] = ret.stdout
-    return final_results
-
 def await_all_results(coros_dict):
+    async def await_all_results_async(coros_dict):
+        tasks = {
+            name: asyncio.create_task(coro, name=name)
+            for name, coro in coros_dict.items()
+        }
+
+        results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+
+        final_results = {}
+        for task, ret in zip(tasks.values(), results):
+            if isinstance(ret, Exception):
+                print(f"Task {task.get_name()} failed: {ret}")
+                continue
+            final_results[task.get_name()] = {
+                'stdout': ret.stdout.decode().rstrip(),
+                'stderr': ret.stderr.decode().rstrip(),
+                'returncode': ret.returncode,
+            }
+        return final_results
     return asyncio.run(await_all_results_async(coros_dict))
+
 
 def async_sequence(repos, promises, indent=4):
     async def _runner():
         tasks = (
             asyncio.create_task(
-                _sequence(repo, horizontal_position=idx))
+                _sequence(repo_name, repo, horizontal_position=idx))
             for idx, (repo_name, repo) in enumerate(repos.items())
         )
         return await asyncio.wait(tasks)
 
-    def get_args(method, path, repo):
+    def get_args(method, path, repo_name, repo):
         match method:
             case Git.fetch_async:
-                return (path, repo.name, repo.remote, repo.branch)
+                return (path, repo_name, repo.remote, repo.branch)
             case Git.reset_async:
                 return (path, True)
             case Git.clean_async:
@@ -325,17 +310,17 @@ def async_sequence(repos, promises, indent=4):
             case Git.pull_async:
                 return (path, repo.remote, repo.branch)
 
-    async def _sequence(repo, horizontal_position):
+    async def _sequence(repo_name, repo, horizontal_position):
         for method in promises:
-            path = odev.paths.repo(repo)
-            args = get_args(method, path, repo)
+            path = odev.paths.repo(repo_name)
+            args = get_args(method, path, repo_name, repo)
 
             args_str = ' '.join([str(arg) for arg in args[1:]])
             operation = re.sub("_async$", "", method.__name__)
             indent_str = ' ' * horizontal_position * indent
             print(f"{indent_str}({path.name}) {operation} {args_str}")
 
-            ret = await method(*get_args(method, path, repo))
+            ret = await method(*get_args(method, path, repo_name, repo))
             if ret.returncode != 0:
                 print(ret.stderr.decode())
                 return
@@ -360,29 +345,6 @@ def select_venv(workspace):
         select("venv", "select", venvs, questionary.autocomplete)
         or workspace.venv_path
     )
-
-
-# Ask reset -------------------------------------------------
-
-def check_status(repos):
-    for repo_name, repo in repos.items():
-        path = odev.paths.repo(repo)
-        ret = Git.status(path, extended=False, name=repo.name)
-        if ret.stdout:
-            answer = strtobool(input_text("Do you wanna reset all changes? (Y/n)"))
-            if answer not in (True, 'default'):
-                print("Cannot load, changes present.")
-                return False
-            return True
-    return True
-
-def ask_reset(hard=False):
-    if strtobool(input_text("Do you wanna reset all changes? (Y/n)")) in (True, 'default'):
-        for repo_name, repo in odev.workspace.repos.items():
-            path = odev.paths.repo(repo)
-            Git.reset(path, hard=hard)
-        return True
-    return False
 
 
 # Questionary helpers --------------------------------------

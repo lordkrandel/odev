@@ -21,15 +21,26 @@ class JsonMixin:
     def from_json(cls, data):
         return cls(**data)
 
+    def to_json_excluded(self):
+        return []
+
     def to_json(self):
-        data = {k: y
-            for k, v in self.__dict__.items()
-            if (
-                (isinstance(v, JsonMixin) and (y := v.to_json()))
-                or (isinstance(v, dict | list) and (y := v))
-                or (y := str(v))
-            )
-        }
+        def to_json_inner(subvalue):
+            data = {}
+            for k, v in subvalue.items():
+                if k in self.to_json_excluded():
+                    continue
+                if isinstance(v, JsonMixin):
+                    y = to_json_inner(v.__dict__)
+                elif isinstance(v, dict):
+                    y = to_json_inner(v)
+                elif isinstance(v, list):
+                    y = v
+                else:
+                    y = str(v)
+                data[k] = y
+            return data
+        data = to_json_inner(self.__dict__)
         return json.dumps(data, indent=4)
 
     def save_json(self, fullpath):

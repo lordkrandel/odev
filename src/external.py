@@ -7,10 +7,10 @@ import shutil
 class External:
 
     @classmethod
-    def run(cls, command, pty=True, hide=None, echo=True):
+    def run(cls, command, pty=True, hide=None, echo=True, in_stream=None):
         if echo:
             print("$ " + command)
-        return invoke.run(command, pty=pty, hide=hide)
+        return invoke.run(command, pty=pty, hide=hide, in_stream=in_stream)
 
     @classmethod
     def edit(cls, editor, target, pty=True, hide=None, echo=False):
