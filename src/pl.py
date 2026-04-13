@@ -16,12 +16,13 @@ from rich.text import Text
 class Command:
     MAX_LINES = 8
 
-    def __init__(self, name, cwd, command):
+    def __init__(self, name, cwd, command, output):
         self.name = name
         self.command = shlex.split(command)
         self.cwd = cwd
         self.process = None
         self._buffer = []
+        self.output = output
 
     def append(self, line):
         # self._buffer = self._buffer[-self.MAX_LINES+1:]
@@ -31,7 +32,7 @@ class Command:
         self.process = await asyncio.create_subprocess_exec(
             *self.command,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
+            stderr=asyncio.subprocess.STDOUT if self.output else None,
             cwd=self.cwd,
         )
         while chunk := await self.process.stdout.read(2 ** 18):
@@ -88,19 +89,25 @@ def async_wrapper(f):
 
 
 @async_wrapper
-async def run(*commands, repos=None, cwd=None, header=True, output=True):
+async def run(*commands, repos=None, cwd=None, header=True, versions=None, output=True):
 
     if isinstance(commands, str):
         commands = [commands]
     if repos:
         def make_commands(commands, repos):
-            return [
+            commands = [
                 x.replace("{path}", str(repo.path))
                  .replace("{remote}", repo.remote)
                  .replace("{branch}", repo.branch)
-                for x in commands
-                for repo_name, repo in repos.items()
+                 .replace("{version}", version)
+                 for x in commands
+                 for repo_name, repo in repos.items()
+                 for version in (versions or [""])
             ]
+            from pprint import pprint
+            pprint(commands)
+            return commands
+
         commands = make_commands(commands, repos)
 
     cwd = cwd or os.path.abspath(os.path.curdir)
@@ -120,7 +127,7 @@ async def run(*commands, repos=None, cwd=None, header=True, output=True):
         print(80 * '-')
 
     commands = {
-        name: Command(name=name, cwd=cwd, command=line)
+        name: Command(name=name, cwd=cwd, command=line, output=output)
         for idx, line in enumerate(commands, 1)
         if (name := str(idx))
     }

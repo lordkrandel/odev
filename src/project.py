@@ -1,33 +1,26 @@
-# Part of Odoo. See LICENSE file for full copyright and licensing details.
-
 import json
 from paths import ensure
 from pathlib import Path
+from workspace import Workspace
+from templates import main_repos, template_repos
 from json_mixin import JsonMixin
 
-TEMPLATE = """{
-    "name": "master",
-    "db_name": "{{db_name}}",
-    "db_dump_file": "master.dmp",
-    "modules": [
-        "base"
-    ],
-    "post_hook_script": "post_hook.py",
-    "venv_path": ".venv",
-    "rc_file": ".odoorc",
-    "repos": {:
-        "odoo": {
-            "name": "odoo",
-            "remote": "origin",
-            "branch": "master"
+
+def create_template(name, db_name):
+    return Workspace(
+        name=name,
+        db_name=db_name,
+        repos={
+            repo_name: template_repos[repo_name]
+            for repo_name in main_repos
         },
-        "enterprise": {
-            "name": "enterprise",
-            "remote": "origin",
-            "branch": "master"
-        }
-    }
-}"""
+        modules=['base'],
+        db_dump_file=f'{name}.dmp',
+        post_hook_script='post_hook.py',
+        venv_path='.venv',
+        rc_file='.odoorc',
+        extra_config=None,
+    ).to_json()
 
 
 class Project(JsonMixin):

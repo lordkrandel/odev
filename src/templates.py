@@ -1,5 +1,3 @@
-# Part of Odoo. See LICENSE file for full copyright and licensing details.
-
 from repo import Repo
 
 
@@ -12,7 +10,7 @@ template_repos = {
     'runbot':        Repo('origin', '18.0'),
     'upgrade':       Repo('origin', 'master'),
     'upgrade-util':  Repo('origin', 'master'),
-    'iap-apps':      Repo('origin', 'master'),
+    'iap-apps':      Repo('origin', '18.0'),
     'tutorials':     Repo('origin', '19.0')
 }
 
@@ -50,7 +48,6 @@ origins = {
     },
 }
 
-post_hook_template = """# Part of Odoo. See LICENSE file for full copyright and licensing details.
-
+post_hook_template = """
 self = locals().get('self', object())
 """

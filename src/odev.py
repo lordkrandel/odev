@@ -1,13 +1,14 @@
-# Part of Odoo. See LICENSE file for full copyright and licensing details.
+import typer
 
 import consts
 from merge_cache import MergeCache
 from pathlib import Path
 from paths import digest, parent_digests
 from project import Projects
-from typer import Typer
 
-class Odev(Typer):
+
+
+class Odev(typer.Typer):
 
     def __init__(self, *args, **kwargs):
         super(Odev, self).__init__(*args, **kwargs)
@@ -21,6 +22,18 @@ class Odev(Typer):
             self.setup_variable_paths()
             self.merge_cache = MergeCache.load_json(self.paths.cache)
             self.reload_workspaces()
+
+        self.db = self._subcommand("db", help="Manage Odoo database")
+        self.path = self._subcommand("path", help="Get paths info")
+        self.git = self._subcommand("git", help="Git operations on all repos")
+        self.workspace = self._subcommand("workspace", help="Workspace operations")
+        self.slot = self._subcommand("slot", help="Manage save slots")
+        self.odoo = self._subcommand("odoo", help="Odoo operations")
+
+    def _subcommand(self, name, **kwargs):
+        subcommand = typer.Typer(no_args_is_help=True)
+        self.add_typer(subcommand, name=name, **kwargs)
+        return subcommand
 
     def reload_workspaces(self):
         self.workspaces = sorted([x.name for x in self.paths.workspaces.iterdir()])
@@ -51,5 +64,6 @@ class Odev(Typer):
         self.paths.workspace = lambda name: self.paths.workspaces / name
         self.paths.workspace_file = lambda name: self.paths.workspace(name) / f"{name}.json"
         self.paths.hook_file = lambda name: self.paths.workspace(name) / "post_hook.py"
+
 
 odev = Odev(rich_markup_mode=False)

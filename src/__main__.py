@@ -3,5 +3,9 @@
 import typer.core
 typer.core.rich = None
 
-import commands  # noqa: E402
-commands.odev()
+# load the commands in memory
+import commands  # noqa: E402, F401
+
+# start the command handling
+from odev import odev  # noqa: E402
+odev()

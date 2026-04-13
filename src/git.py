@@ -1,4 +1,3 @@
-# Part of Odoo. See LICENSE file for full copyright and licensing details.
 # ruff: noqa: T201
 
 import asyncio
@@ -49,7 +48,7 @@ class Git(External):
 
     @classmethod
     def clone(cls, repository, branch, directory):
-        return cls.run(f'git clone --branch {branch} --single-branch {repository} {directory}')
+        return cls.run(f'git clone --filter=blob:none --branch {branch} --single-branch {repository} {directory}')
 
     @classmethod
     def add_remote(cls, name, url, path):

@@ -1,5 +1,3 @@
-# Part of Odoo. See LICENSE file for full copyright and licensing details.
-
 import invoke
 from tempfile import NamedTemporaryFile
 
@@ -50,9 +48,11 @@ class Odoo(External):
         stop = "--stop-after-init" if stop else ''
 
         if modules:
-            modules = f"-i {','.join(modules)}"
+            modules_str = ','.join(modules)
+            modules = f"-i {modules_str} --reinit {modules_str}"
         elif modules is None:
-            modules = f"-i {','.join(workspace.modules)}"
+            modules_str = ','.join(workspace.modules)
+            modules = f"-i {modules_str} --reinit {modules_str}"
         else:
             modules = ""
 

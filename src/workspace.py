@@ -1,6 +1,3 @@
-# Part of Odoo. See LICENSE file for full copyright and licensing details.
-
-import json
 from pathlib import Path
 from repo import Repo
 from json_mixin import JsonMixin

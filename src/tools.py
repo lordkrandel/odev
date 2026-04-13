@@ -1,18 +1,14 @@
-# Part of Odoo. See LICENSE file for full copyright and licensing details.
-
 from pathlib import Path
 
 import paths
 from git import Git
-import pl
 from odev import odev
 from pgsql import PgSql
-from project import Projects, Project, TEMPLATE
+from project import Project, create_template
 from repo import Repo
 from templates import template_repos, main_repos, origins, post_hook_template
 from workspace import Workspace
 
-import asyncio
 import consts
 from datetime import datetime
 import questionary
@@ -86,7 +82,7 @@ def create_project(path, db_name=None):
     master_fullpath = master_path / "master.json"
     if not master_fullpath.exists():
         with open(master_fullpath, "w", encoding="utf-8") as f:
-            f.write(TEMPLATE.replace("{{db_name}}", db_name))
+            f.write(create_template('master', db_name))
 
     return project
 
@@ -202,9 +198,9 @@ def select_workspace(action, project):
 
 # Repository and branches ------------------------------------
 
-def select_repos_and_branches(project, action, workspace=None):
+def select_repos_and_branches(project, action, checked=None, workspace=None):
     repos = {}
-    for repo_name, repo in select_repositories(action, workspace, checked=main_repos).items():
+    for repo_name, repo in select_repositories(action, workspace, checked=checked or main_repos).items():
         repos[repo_name] = select_branch(project, repo_name, action)
     return repos
 
@@ -261,70 +257,6 @@ def select_branch(project, repo_name, action, choices=None, remote=None):
     ).ask()
     if branch:
         return Repo(remote, branch)
-
-
-# Async ------------------------------------------------------
-
-def await_all_results(coros_dict):
-    async def await_all_results_async(coros_dict):
-        tasks = {
-            name: asyncio.create_task(coro, name=name)
-            for name, coro in coros_dict.items()
-        }
-
-        results = await asyncio.gather(*tasks.values(), return_exceptions=True)
-
-        final_results = {}
-        for task, ret in zip(tasks.values(), results):
-            if isinstance(ret, Exception):
-                print(f"Task {task.get_name()} failed: {ret}")
-                continue
-            final_results[task.get_name()] = {
-                'stdout': ret.stdout.decode().rstrip(),
-                'stderr': ret.stderr.decode().rstrip(),
-                'returncode': ret.returncode,
-            }
-        return final_results
-    return asyncio.run(await_all_results_async(coros_dict))
-
-
-def async_sequence(repos, promises, indent=4):
-    async def _runner():
-        tasks = (
-            asyncio.create_task(
-                _sequence(repo_name, repo, horizontal_position=idx))
-            for idx, (repo_name, repo) in enumerate(repos.items())
-        )
-        return await asyncio.wait(tasks)
-
-    def get_args(method, path, repo_name, repo):
-        match method:
-            case Git.fetch_async:
-                return (path, repo_name, repo.remote, repo.branch)
-            case Git.reset_async:
-                return (path, True)
-            case Git.clean_async:
-                return (path, )
-            case Git.checkout_async:
-                return (path, repo.branch)
-            case Git.pull_async:
-                return (path, repo.remote, repo.branch)
-
-    async def _sequence(repo_name, repo, horizontal_position):
-        for method in promises:
-            path = odev.paths.repo(repo_name)
-            args = get_args(method, path, repo_name, repo)
-
-            args_str = ' '.join([str(arg) for arg in args[1:]])
-            operation = re.sub("_async$", "", method.__name__)
-            indent_str = ' ' * horizontal_position * indent
-            print(f"{indent_str}({path.name}) {operation} {args_str}")
-
-            ret = await method(*get_args(method, path, repo_name, repo))
-            if ret.returncode != 0:
-                print(ret.stderr.decode())
-                return
-    return asyncio.run(_runner())
 
 
 # Database name --------------------------------------------
