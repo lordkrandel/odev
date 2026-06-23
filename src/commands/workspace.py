@@ -78,9 +78,12 @@ def update(ctx: Context, workspace_name: Optional[str] = WorkspaceNameArgument()
 
 
 @odev.workspace.command()
-def dupe(workspace_name: Optional[str] = WorkspaceNameArgument(default=None),
-                   dest_workspace_name: Optional[str] = Argument(None, help="Destination name"),
-                   _load: bool = False):
+def dupe(
+    ctx: Context,
+    workspace_name: Optional[str] = WorkspaceNameArgument(default=None),
+    dest_workspace_name: Optional[str] = Argument(None, help="Destination name"),
+    _load: bool = False
+):
     """
         Duplicate a workspace.
     """

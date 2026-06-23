@@ -8,7 +8,18 @@ from pathlib import Path
 class Odoo(External):
 
     @classmethod
-    def banner(cls, bin_path, venv_path, modules, options, mode, demo, stop, workspace):
+    def banner(cls, **kwargs):
+        locals
+        workspace = kwargs.get('workspace')
+        bin_path = kwargs.get('bin_path')
+        venv_path = kwargs.get('venv_path')
+        modules = kwargs.get('modules')
+        options = kwargs.get('options')
+        mode = kwargs.get('mode')
+        stop = kwargs.get('stop')
+        demo = kwargs.get('demo')
+        do_autoinstall = kwargs.get('do_autoinstall')
+
         addons_path = ",".join(str(x) for x in (workspace.addons_path or []))
         upgrade_path = ",".join(str(x) for x in (workspace.upgrade_path or []))
         base_path = Path(bin_path).absolute().parent
@@ -30,6 +41,7 @@ class Odoo(External):
         if stop:
             print(f"    Stop: {stop}")
         print(f"    Demo data: {demo}")
+        print(f"    Autoinstall: {do_autoinstall}")
         print(f"{80 * '-'}")
 
     @classmethod
@@ -37,7 +49,20 @@ class Odoo(External):
         return not demo and "--without-demo=1" or "--without-demo=0"
 
     @classmethod
-    def start(cls, project, workspace, modules=None, options=None, mode=None, pty=False, demo=False, stop=False, in_stream=None, env_vars=None):
+    def start(
+        cls,
+        project,
+        workspace,
+        modules=None,
+        options=None,
+        mode=None,
+        pty=False,
+        demo=False,
+        do_autoinstall=False,
+        stop=False,
+        in_stream=None,
+        env_vars=None,
+    ):
         project_path = Path(project.path)
         bin_path = project_path / 'odoo'
         venv_path = project_path / workspace.venv_path
@@ -46,17 +71,28 @@ class Odoo(External):
         mode = mode or ''
         env_vars = env_vars or ''
         stop = "--stop-after-init" if stop else ''
+        do_autoinstall_str = '' if do_autoinstall else '--skip-auto-install'
 
         if modules:
             modules_str = ','.join(modules)
-            modules = f"-i {modules_str} --reinit {modules_str}"
+            modules = f"-i {modules_str}"
         elif modules is None:
             modules_str = ','.join(workspace.modules)
-            modules = f"-i {modules_str} --reinit {modules_str}"
+            modules = f"-i {modules_str}"
         else:
             modules = ""
 
-        cls.banner(bin_path, venv_path, modules, options, mode, demo, stop, workspace)
+        cls.banner(
+            bin_path=bin_path,
+            venv_path=venv_path,
+            modules=modules,
+            options=options,
+            mode=mode,
+            demo=demo,
+            stop=stop,
+            workspace=workspace,
+            do_autoinstall=do_autoinstall,
+        )
 
         extra_config = {
             "addons_path": ",".join(str(project_path / x) for x in (workspace.addons_path or [])),
@@ -73,7 +109,18 @@ class Odoo(External):
             context = invoke.Context()
             with context.cd(bin_path):
                 venv_script_path = project_path / Path(workspace.venv_path) / 'bin' / 'activate'
-                command = f'source {venv_script_path} && {env_vars} {bin_path}/odoo-bin {mode} {cls.get_demo_option(demo)} -c {tfile.name} {modules} {stop} {options}'
+                command = (
+                    f'source {venv_script_path}'
+                    ' && '
+                    f' {env_vars} {bin_path}/odoo-bin'
+                    f' {mode}'
+                    f' {cls.get_demo_option(demo)}'
+                    f' -c {tfile.name}'
+                    f' {modules}'
+                    f' {stop}'
+                    f' {options}'
+                    f' {do_autoinstall_str}'
+                )
                 print(command)
                 context.run(command, pty=pty, in_stream=in_stream)
 

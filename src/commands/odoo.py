@@ -27,11 +27,14 @@ from templates import addons_path, origins, main_repos, template_repos
 
 
 @odev.odoo.command(name="start")
-def start(workspace_name: Optional[str] = WorkspaceNameArgument(),
-          fast: bool = False,
-          demo: bool = False,
-          options: Optional[str] = None,
-          stop: bool = False):
+def start(
+    ctx: Context,
+    workspace_name: Optional[str] = WorkspaceNameArgument(),
+    fast: bool = False,
+    demo: bool = False,
+    options: Optional[str] = None,
+    stop: bool = False,
+):
     """
         Start Odoo and reinitialize the workspace's modules.
     """
@@ -136,7 +139,7 @@ def get_branches(
 @odev.odoo.command()
 def bundle(
     ctx: Context,
-    bundle_name: str = Argument(None, help="Bundle name"),
+    bundle_name: str = Argument('', help="Bundle name"),
     db_name: str = Argument('odoo', help="Database name"),
     workspace_name: Optional[str] = WorkspaceNameArgument(),
 ):
@@ -150,7 +153,7 @@ def bundle(
         return
 
     bundle_name = tools.cleanup_colon(bundle_name)
-    if not (repo_names := get_branches()):
+    if not (repo_names := get_branches(bundle_name)):
         sys.exit(f"Bundle {bundle_name} not found")
 
     version = tools._extract_version(bundle_name)
@@ -158,7 +161,7 @@ def bundle(
 
     base_branch = version['name']
     have_dev_origin = [k for k, v in origins.items() if 'dev' in v]
-    if arbitrary_repo := next(iter(have_dev_origin), None):
+    if arbitrary_repo := next(iter(list(set(have_dev_origin) & repo_names)), None):
         base_branch = tools.find_base(arbitrary_repo, branch=bundle_name)
 
     repos = {}
@@ -196,12 +199,12 @@ def bundle(
         modules = workspace.modules
 
     pl.run(
-        "git -C {path} fetch --progress {remote} " + base_branch,
+        "git -C {path} fetch --progress origin " + base_branch,
         "git -C {path} fetch --progress {remote} {branch}",
         repos=repos,
     )
     pl.run(
-        "git -C {path} checkout {remote}/{branch}",
+        "git -C {path} checkout -B {branch} --track {remote}/{branch}",
         repos=repos,
     )
 
@@ -344,7 +347,8 @@ def init(
     dump_after: bool = False,
     demo: bool = False,
     debug_hook: bool = False,
-    post_init_hook: bool = True
+    post_init_hook: bool = True,
+    do_autoinstall: bool = False,
 ):
     """
          Initialize the database, with modules and hook.
@@ -361,6 +365,10 @@ def init(
     if invalid_modules := get_invalid_modules():
         sys.exit(f"Modules {invalid_modules} in the workspace list are not valid.")
 
+    if '17.0' in odev.workspace.repos['odoo'].branch:
+        print(1)
+        do_autoinstall = True
+
     Odoo.start(
         project=odev.project,
         workspace=odev.workspace,
@@ -368,6 +376,7 @@ def init(
         options=options,
         demo=demo,
         stop=True,
+        do_autoinstall=do_autoinstall,
     )
 
     modules = (modules_csv and modules_csv.split(',')) or odev.workspace.modules
@@ -378,6 +387,7 @@ def init(
         options=options,
         demo=demo,
         stop=True,
+        do_autoinstall=do_autoinstall,
     )
 
     # Dump the db before the hook if the user has specifically asked for it
@@ -404,6 +414,7 @@ def init(
             pty=True,
             stop=stop,
             env_vars=env_vars,
+            do_autoinstall=do_autoinstall,
         )
         if debug_hook:
             return

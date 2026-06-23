@@ -1,4 +1,6 @@
+import click
 import typer
+import sys
 
 import consts
 from merge_cache import MergeCache
@@ -7,18 +9,24 @@ from paths import digest, parent_digests
 from project import Projects
 
 
-
 class Odev(typer.Typer):
 
     def __init__(self, *args, **kwargs):
-        super(Odev, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.workspace = None
         self.repo = None
 
         self.setup_fixed_paths()
         self.projects = Projects.load(self.paths.projects)
         self.projects.save()
-        if self.setup_current_project():
+        self.project = self.setup_current_project()
+        try:
+            self.commandname = click.get_current_context().info_name
+        except RuntimeError:
+            self.commandname = None
+        if not self.project and self.commandname:
+            sys.exit("Project not found in folder")
+        if self.project:
             self.setup_variable_paths()
             self.merge_cache = MergeCache.load_json(self.paths.cache)
             self.reload_workspaces()
@@ -48,17 +56,14 @@ class Odev(typer.Typer):
         return self.paths
 
     def setup_current_project(self):
-        self.project = None
         for parent_digest in parent_digests(self.paths.starting):
             if parent_digest in self.projects:
-                self.project = self.projects.get(parent_digest)
-                break
-        return self.project
+                return self.projects.get(parent_digest)
 
     def setup_variable_paths(self):
         self.paths.project = Path(self.project.path)
         self.paths.relative = lambda x: self.paths.project / x
-        self.paths.repo = lambda repo_name: self.paths.relative(repo_name)
+        self.paths.repo = self.paths.relative
         self.paths.workspaces = self.paths.config / 'workspaces' / digest(self.paths.project)
         self.paths.cache = self.paths.workspaces / "cache.json"
         self.paths.workspace = lambda name: self.paths.workspaces / name

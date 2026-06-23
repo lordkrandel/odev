@@ -57,7 +57,7 @@ def workspace(
     workspace_name: Optional[str] = WorkspaceNameArgument(),
     edit: bool = False,
     name: bool = False,
-    file: bool = False
+    base: bool = False
 ):
     """
         Display currently selected workspace data.
@@ -65,7 +65,11 @@ def workspace(
     if not odev.workspace:
         print(f"No workspace named '{workspace_name}' found")
         return
-    print(odev.paths.workspace_file(odev.workspace.name))
+    if base:
+        path = odev.paths.workspace(odev.workspace.name)
+    else:
+        path = odev.paths.workspace_file(odev.workspace.name)
+    print(path)
 
 
 @odev.path.command()

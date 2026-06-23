@@ -110,8 +110,6 @@ def get_venv_path(version):
     match int(version.get('major', 999)):
         case x if x >= 19:
             return ".venv313"
-        case x if x in range(16, 19):
-            return ".venv311"
         case _:
             return ".venv310"
 

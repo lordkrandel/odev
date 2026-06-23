@@ -3,8 +3,7 @@ from pathlib import Path
 from itertools import product
 from typing import Optional
 
-import click
-from typer import Argument
+from typer import Argument, Context
 
 import pl
 import tools
@@ -25,18 +24,14 @@ helps = dict(
 )
 
 
-def set_target(workspace_name: str = None):
-    subcommand = click.get_current_context().parent.invoked_subcommand
-    if subcommand is None:
-        # If it's autocomplete, don't ask interactively
-        return
+def set_target(workspace_name: str | None = None):
     if not workspace_name:
         workspace_name = tools.select_workspace("select (default=last)", odev.project)
     elif workspace_name == 'last':
         try:
             workspace_name = odev.project.last_used
-        except Exception:
-            sys.exit('Cannot read last_used')
+        except Exception as e:
+            sys.exit(f'Cannot read last_used, {e}')
     else:
         workspace_name = tools.cleanup_colon(workspace_name)
     workspace_file = odev.paths.workspace_file(workspace_name)
@@ -44,8 +39,8 @@ def set_target(workspace_name: str = None):
         sys.exit(f"Workspace file {workspace_file} doesn't exist")
     try:
         odev.workspace = Workspace.load_json(workspace_file)
-    except Exception:
-        sys.exit(f"Cannot load {workspace_file}")
+    except Exception as e:
+        sys.exit(f"Cannot load {workspace_file}, {e}")
     if odev.workspace:
         odev.workspace.set_path(odev.paths.project)
         for repo_name, repo in odev.workspace.repos.items():
