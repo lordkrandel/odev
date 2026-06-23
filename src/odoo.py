@@ -1,3 +1,5 @@
+# ruff: noqa: T201
+
 import invoke
 from tempfile import NamedTemporaryFile
 
@@ -101,7 +103,7 @@ class Odoo(External):
             **workspace.extra_config,
         }
 
-        with NamedTemporaryFile(mode='w+', delete=False, delete_on_close=False) as tfile:
+        with NamedTemporaryFile(mode='w+', delete=False, delete_on_close=False, encoding='utf-8') as tfile:
             tfile.write("[options]\n")
             for k, v in (extra_config or {}).items():
                 tfile.write(f"{k}={v}\n")

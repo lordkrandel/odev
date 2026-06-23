@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: T201
 
 import asyncio
 import io
@@ -25,7 +26,6 @@ class Command:
         self.output = output
 
     def append(self, line):
-        # self._buffer = self._buffer[-self.MAX_LINES+1:]
         self._buffer.append(line)
 
     async def run(self, queue):
@@ -39,6 +39,7 @@ class Command:
             await queue.put([self.name, chunk.decode().strip()])
         return self.process
 
+
 def render(commands, live):
     render = []
     for name, command in commands.items():
@@ -47,12 +48,11 @@ def render(commands, live):
         bar = f"{title} {'-' * (100 - len(title))}"
         items.append(Text(f"{name} {bar}", style="orange3"))
         min_idx = max(len(command._buffer) - command.MAX_LINES, 1)
-        sub_items = []
-        for idx, line in enumerate(command._buffer[min_idx:], min_idx):
-            sub_items.append(Text(f"{idx:03}  ", style="dim"))
-            sub_items.append(Text(line + "\n", style="gray75"))
-        if sub_items:
-            items.append(Text.assemble(*sub_items))
+        items.append(Text.assemble(*(
+            item
+            for idx, line in enumerate(command._buffer[min_idx:], min_idx)
+            for item in (Text(f"{idx:03}  ", style="dim"), Text(line + "\n", style="gray75"))
+        )))
         render.append(Group(*items))
     live.update(Group(*render))
     live.refresh()
@@ -104,13 +104,11 @@ async def run(*commands, repos=None, cwd=None, header=True, versions=None, outpu
                  for repo_name, repo in repos.items()
                  for version in (versions or [""])
             ]
-            from pprint import pprint
-            pprint(commands)
             return commands
 
         commands = make_commands(commands, repos)
 
-    cwd = cwd or os.path.abspath(os.path.curdir)
+    cwd = cwd or os.path.abspath(os.path.curdir)  # noqa: ASYNC240
     if not commands:
         handle_non_interactive()
         commands = [
@@ -157,6 +155,7 @@ async def run(*commands, repos=None, cwd=None, header=True, versions=None, outpu
         stream.seek(0)
         return stream.read()
     return None
+
 
 if __name__ == "__main__":
     run()

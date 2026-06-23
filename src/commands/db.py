@@ -1,5 +1,3 @@
-from typing import Optional
-
 from typer import Argument
 
 from commands.common import WorkspaceNameArgument
@@ -8,8 +6,8 @@ from pgsql import PgSql
 
 
 @odev.db.command()
-def clear(db_name: Optional[str] = Argument(None, help="Database name"),
-             workspace_name: Optional[str] = WorkspaceNameArgument()):
+def clear(db_name: str | None = Argument(None, help="Database name"),
+             workspace_name: str | None = WorkspaceNameArgument()):
     """
          Clear database by dropping and recreating it.
     """
@@ -17,7 +15,7 @@ def clear(db_name: Optional[str] = Argument(None, help="Database name"),
 
 
 @odev.db.command()
-def dump(workspace_name: Optional[str] = WorkspaceNameArgument()):
+def dump(workspace_name: str | None = WorkspaceNameArgument()):
     """
          Dump the DB for the selected workspace.
     """
@@ -27,7 +25,7 @@ def dump(workspace_name: Optional[str] = WorkspaceNameArgument()):
 
 
 @odev.db.command()
-def restore(workspace_name: Optional[str] = WorkspaceNameArgument()):
+def restore(workspace_name: str | None = WorkspaceNameArgument()):
     """
          Restore the DB for the selected workspace.
     """

@@ -1,6 +1,5 @@
 import re
 from datetime import datetime
-from typing import Optional
 
 from typer import Context, Argument
 
@@ -16,8 +15,8 @@ def get_name(name="QuickSave"):
 @odev.slot.command(name="save")
 def save(
     ctx: Context,
-    workspace_name: Optional[str] = WorkspaceNameArgument(),
-    name: Optional[str] = Argument(default="QuickSave"),
+    workspace_name: str | None = WorkspaceNameArgument(),
+    name: str | None = Argument(default="QuickSave"),
 ):
     pl.run(
         f"git -C {{path}} stash push -u -m '{get_name(name)}'",
@@ -28,8 +27,8 @@ def save(
 @odev.slot.command(name="load")
 def load(
     ctx: Context,
-    name: Optional[str] = Argument(default='QuickSave'),
-    workspace_name: Optional[str] = WorkspaceNameArgument(),
+    name: str | None = Argument(default='QuickSave'),
+    workspace_name: str | None = WorkspaceNameArgument(),
 ):
     output = pl.run(
         f"git -C {{path}} stash list --grep='{name}'",

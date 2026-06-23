@@ -1,8 +1,5 @@
-# Part of Odoo. See LICENSE file for full copyright and licensing details.
-
 import configparser
 from io import StringIO
-from pathlib import Path
 
 
 class Rc:
@@ -15,7 +12,7 @@ class Rc:
     def check_db_name(self, db_name):
         valid = db_name == self.db_name
         print(f"Database check {valid and 'OK' or 'NOK'}: workspace->{db_name} rc_file->{self.db_name}")
-        assert(valid)
+        assert valid
 
     @property
     def db_name(self):

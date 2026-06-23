@@ -1,13 +1,12 @@
 import sys
 from pathlib import Path
-from typing import Optional
 
 from commands.common import WorkspaceNameArgument
 from odev import odev
 
 
 @odev.path.command()
-def venv(workspace_name: Optional[str] = WorkspaceNameArgument()):
+def venv(workspace_name: str | None = WorkspaceNameArgument()):
     """
         Path to the activate script for the current virtual environment.
     """
@@ -16,7 +15,7 @@ def venv(workspace_name: Optional[str] = WorkspaceNameArgument()):
 
 @odev.path.command()
 def hook(
-    workspace_name: Optional[str] = WorkspaceNameArgument(),
+    workspace_name: str | None = WorkspaceNameArgument(),
 ):
     """
         Print the post_hook python full path
@@ -27,7 +26,7 @@ def hook(
 
 
 @odev.path.command()
-def rc(workspace_name: Optional[str] = WorkspaceNameArgument()):
+def rc(workspace_name: str | None = WorkspaceNameArgument()):
     """
         Print the .odoorc config with default editor.
     """
@@ -54,7 +53,7 @@ def workspaces():
 
 @odev.path.command()
 def workspace(
-    workspace_name: Optional[str] = WorkspaceNameArgument(),
+    workspace_name: str | None = WorkspaceNameArgument(),
     edit: bool = False,
     name: bool = False,
     base: bool = False
@@ -74,7 +73,7 @@ def workspace(
 
 @odev.path.command()
 def base(
-    workspace_name: Optional[str] = WorkspaceNameArgument(),
+    workspace_name: str | None = WorkspaceNameArgument(),
     edit: bool = False,
     name: bool = False,
     file: bool = False

@@ -7,11 +7,9 @@ import tempfile
 import textwrap
 from glob import glob
 from pathlib import Path
-from typing import Optional
 
 from typer import Argument, Context, Option
 
-# import paths
 import commands.db as db
 import pl
 import tools
@@ -29,10 +27,10 @@ from templates import addons_path, origins, main_repos, template_repos
 @odev.odoo.command(name="start")
 def start(
     ctx: Context,
-    workspace_name: Optional[str] = WorkspaceNameArgument(),
+    workspace_name: str | None = WorkspaceNameArgument(),
     fast: bool = False,
     demo: bool = False,
-    options: Optional[str] = None,
+    options: str | None = None,
     stop: bool = False,
 ):
     """
@@ -52,9 +50,9 @@ def start(
 
 @odev.odoo.command()
 def shell(
-    interface: Optional[str] = Argument("ipython", help="Type of shell interface (ipython|ptpython|bpython)"),
-    script: Optional[str] = Option(None, help="Startup Python script to initialize the Shell"),
-    workspace_name: Optional[str] = WorkspaceNameArgument()
+    interface: str | None = Argument("ipython", help="Type of shell interface (ipython|ptpython|bpython)"),
+    script: str | None = Option(None, help="Startup Python script to initialize the Shell"),
+    workspace_name: str | None = WorkspaceNameArgument()
 ):
     """
         Starts Odoo as an interactive shell.
@@ -72,7 +70,7 @@ def shell(
 
 
 @odev.odoo.command()
-def deps(module, workspace_name: Optional[str] = WorkspaceNameArgument()):
+def deps(module, workspace_name: str | None = WorkspaceNameArgument()):
     """
         Find module dependancy order for a specific module.
     """
@@ -125,7 +123,7 @@ def deps(module, workspace_name: Optional[str] = WorkspaceNameArgument()):
 @odev.odoo.command()
 def get_branches(
     bundle_name: str = Argument('None', help='Bundle name'),
-    workspace_name: Optional[str] = WorkspaceNameArgument(),
+    workspace_name: str | None = WorkspaceNameArgument(),
 ):
     """
         Get from runbot the set of repos that have a branch with that name
@@ -141,7 +139,7 @@ def bundle(
     ctx: Context,
     bundle_name: str = Argument('', help="Bundle name"),
     db_name: str = Argument('odoo', help="Database name"),
-    workspace_name: Optional[str] = WorkspaceNameArgument(),
+    workspace_name: str | None = WorkspaceNameArgument(),
 ):
     """
         Creates a workspace from a Bundle on Runbot.
@@ -224,7 +222,7 @@ def bundle(
 
 
 @odev.odoo.command()
-def lint(workspace_name: Optional[str] = WorkspaceNameArgument()):
+def lint(workspace_name: str | None = WorkspaceNameArgument()):
     """
         Start linting tests.
     """
@@ -239,8 +237,8 @@ def lint(workspace_name: Optional[str] = WorkspaceNameArgument()):
 
 @odev.odoo.command()
 def l10n_tests(
-    tags: Optional[str] = "*",
-    workspace_name: Optional[str] = WorkspaceNameArgument(),
+    tags: str | None = "*",
+    workspace_name: str | None = WorkspaceNameArgument(),
     fast: bool = False,
 ):
     """ Run l10n tests """
@@ -258,7 +256,7 @@ def l10n_tests(
 
 
 def _tests(
-    tags: Optional[str] = Argument(None, help="Corresponding to --test-tags"),
+    tags: str | None = Argument(None, help="Corresponding to --test-tags"),
     fast: bool = False,
 ):
     """
@@ -281,9 +279,9 @@ def _tests(
 
 @odev.odoo.command()
 def test(
-    tags: Optional[str] = Argument(None, help="Corresponding to --test-tags"),
+    tags: str | None = Argument(None, help="Corresponding to --test-tags"),
     fast: bool = False,
-    workspace_name: Optional[str] = WorkspaceNameArgument()
+    workspace_name: str | None = WorkspaceNameArgument()
 ):
     """
          Init db (if not fast) and run Odoo's post_install tests.
@@ -297,8 +295,8 @@ def test_commit(
     test_module: str,
     test_filename: str,
     test_class: str,
-    test_name: Optional[str] = None,
-    workspace_name: Optional[str] = WorkspaceNameArgument(),
+    test_name: str | None = None,
+    workspace_name: str | None = WorkspaceNameArgument(),
 ):
     """
         Run a test class setupClass and commit, to create a test case
@@ -340,9 +338,9 @@ def get_invalid_modules():
 
 @odev.odoo.command(name="init")
 def init(
-    workspace_name: Optional[str] = WorkspaceNameArgument(),
-    options: Optional[str] = None,
-    modules_csv: Optional[str] = None,
+    workspace_name: str | None = WorkspaceNameArgument(),
+    options: str | None = None,
+    modules_csv: str | None = None,
     dump_before: bool = False,
     dump_after: bool = False,
     demo: bool = False,
@@ -425,7 +423,7 @@ def init(
 
 
 @odev.odoo.command()
-def setup(db_name: Optional[str] = Argument(None, help="Odoo database name")):
+def setup(db_name: str | None = Argument(None, help="Odoo database name")):
     """
         BROKEN -- Sets up the main folder, with repos and venv.
     """
@@ -493,8 +491,8 @@ def setup(db_name: Optional[str] = Argument(None, help="Odoo database name")):
 @odev.odoo.command()
 def setup_requisites(
     path=Argument(help='Base path for the virtual env'),
-    added_csv: Optional[str] = Argument(help="CSV of the additional python modules to be installed", default=None),
-    reqs_file_csv: Optional[str] = Argument(help="CSV of the requirements modules files", default=None)
+    added_csv: str | None = Argument(help="CSV of the additional python modules to be installed", default=None),
+    reqs_file_csv: str | None = Argument(help="CSV of the requirements modules files", default=None)
 ):
     """
         BROKEN -- Setup a Python virtual environment for the project.
@@ -523,7 +521,7 @@ def setup_requisites(
 
 @odev.odoo.command()
 def upgrade(old_workspace_name: str = Argument(help="Repository to be upgraded"),
-            workspace_name: Optional[str] = WorkspaceNameArgument(),
+            workspace_name: str | None = WorkspaceNameArgument(),
             test: bool = False, test_upgrade: bool = False, hook: bool = False):
     """
         BROKEN --- Run upgrade from a old Workspace to a new Workspace

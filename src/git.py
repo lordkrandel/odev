@@ -6,7 +6,9 @@ from collections import namedtuple
 from external import External
 import re
 
-AsyncProc = namedtuple('AsyncProc', ['returncode', 'stdout', 'stderr'])
+AsyncProc = namedtuple('AsyncProc', ['returncode', 'stdout', 'stderr'])  # noqa: PYI024
+
+
 class Git(External):
 
     @classmethod
@@ -102,7 +104,7 @@ class Git(External):
                 command = 'git branch -r' + (('l "' + remote + '/*"') if remote else '')
             entries = context.run(command, pty=False, hide='out').stdout
             if worktree:
-                return re.findall('refs/heads/(.*)\n', entries)
+                return re.findall(r'refs/heads/(.*)\n', entries)
             else:
                 len_remote = len(remote) + 1 if remote else 0
                 return [x.strip()[len_remote:] for x in entries.split('\n')]

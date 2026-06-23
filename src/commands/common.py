@@ -1,9 +1,11 @@
-import sys
-from pathlib import Path
-from itertools import product
-from typing import Optional
+# ruff: noqa: T201
 
-from typer import Argument, Context
+import sys
+from itertools import product
+from json import JSONDecodeError
+from pathlib import Path
+
+from typer import Argument
 
 import pl
 import tools
@@ -28,10 +30,9 @@ def set_target(workspace_name: str | None = None):
     if not workspace_name:
         workspace_name = tools.select_workspace("select (default=last)", odev.project)
     elif workspace_name == 'last':
-        try:
-            workspace_name = odev.project.last_used
-        except Exception as e:
-            sys.exit(f'Cannot read last_used, {e}')
+        if not odev.project:
+            sys.exit('Project not found')
+        workspace_name = odev.project.last_used
     else:
         workspace_name = tools.cleanup_colon(workspace_name)
     workspace_file = odev.paths.workspace_file(workspace_name)
@@ -39,7 +40,7 @@ def set_target(workspace_name: str | None = None):
         sys.exit(f"Workspace file {workspace_file} doesn't exist")
     try:
         odev.workspace = Workspace.load_json(workspace_file)
-    except Exception as e:
+    except (OSError, ValueError, JSONDecodeError) as e:
         sys.exit(f"Cannot load {workspace_file}, {e}")
     if odev.workspace:
         odev.workspace.set_path(odev.paths.project)
@@ -55,7 +56,7 @@ def set_target(workspace_name: str | None = None):
 
 def WorkspaceNameArgument(*args, default='last', **kwargs):
 
-    def workspaces_yield(incomplete: Optional[str] = None):
+    def workspaces_yield(incomplete: str | None = None):
         return [workspace_name for workspace_name in odev.workspaces if workspace_name.startswith(workspace_name)]
 
     return Argument(*args, **{
@@ -69,7 +70,7 @@ def WorkspaceNameArgument(*args, default='last', **kwargs):
 
 @odev.command()
 def update_merge_base_cache(
-    workspace_name: Optional[str] = WorkspaceNameArgument()
+    workspace_name: str | None = WorkspaceNameArgument()
 ):
     """
         Update the merge base cache
@@ -90,10 +91,10 @@ def update_merge_base_cache(
         versions=odev.merge_cache.versions,
     )
     keys = [
-        f"{repo_name}/{version}" 
+        f"{repo_name}/{version}"
         for repo_name, version in product(repos, odev.merge_cache.versions)
     ]
-    hashes = list(
+    hashes = [
         clean_line
         for line in pl.run(
             "git -C {path} merge-base origin/master origin/{version}",
@@ -102,7 +103,7 @@ def update_merge_base_cache(
             output=False,
         ).splitlines()
         if (clean_line := line.rstrip())
-    )
+    ]
     results = dict(zip(keys, hashes))
     for key, merge_base in results.items():
         repo, version = key.split('/')
@@ -112,8 +113,8 @@ def update_merge_base_cache(
 
 @odev.command()
 def project_create(
-    project_path: Optional[str] = Argument(None, help=helps['project_path']),
-    db_name: Optional[str] = Argument(None, help=helps['db_name'])
+    project_path: str | None = Argument(None, help=helps['project_path']),
+    db_name: str | None = Argument(None, help=helps['db_name'])
 ):
     """
         Create a project for the current directory

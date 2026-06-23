@@ -1,6 +1,7 @@
+# ruff: noqa: T201
+
 import shutil
 import fileinput
-from typing import Optional
 
 from typer import Argument, Context
 
@@ -33,24 +34,23 @@ def _switch(workspace_name, ask_reset=True):
     last_used = odev.project.last_used
     print(f"{last_used} -> {workspace_name} (updated)...")
 
+    # Cleaning and fetching
     pl.run(
-        "git -C {path} clean -xdf",
+        "git -C {path} clean -xdfq",
         "git -C {path} fetch {remote} {branch}",
+        repos=odev.workspace.repos,
+    )
+    # Switching
+    pl.run(
         "git -C {path} switch -C {branch} --track {remote}/{branch}",
-        # "git -C {path} rebase --abort",
-        # "git -C {path} fetch --progress --verbose  {remote} {branch}",
-        # "git -C {path} clean -xdf",
-        # "git -C {path} switch -C {branch} --track {remote}/{branch}",
-        # "git -C {path} pull {remote} {branch}",
-        # "git -C {path} clean -xdf",
-        repos=odev.workspace.repos
+        repos=odev.workspace.repos,
     )
     tools.set_last_used(workspace_name)
     odev.workspace = workspace
 
 
 @odev.workspace.command()
-def load(workspace_name: Optional[str] = WorkspaceNameArgument(default=None)):
+def load(workspace_name: str | None = WorkspaceNameArgument(default=None)):
     """
         Load given workspace into the session.
     """
@@ -58,7 +58,7 @@ def load(workspace_name: Optional[str] = WorkspaceNameArgument(default=None)):
 
 
 @odev.workspace.command()
-def update(ctx: Context, workspace_name: Optional[str] = WorkspaceNameArgument()):
+def update(ctx: Context, workspace_name: str | None = WorkspaceNameArgument()):
     """
         Updates given workspace and reloads the current one.
         With asynchronous methods.
@@ -79,9 +79,8 @@ def update(ctx: Context, workspace_name: Optional[str] = WorkspaceNameArgument()
 
 @odev.workspace.command()
 def dupe(
-    ctx: Context,
-    workspace_name: Optional[str] = WorkspaceNameArgument(default=None),
-    dest_workspace_name: Optional[str] = Argument(None, help="Destination name"),
+    workspace_name: str | None = WorkspaceNameArgument(default=None),
+    dest_workspace_name: str | None = Argument(None, help="Destination name"),
     _load: bool = False
 ):
     """
@@ -119,10 +118,10 @@ def dupe(
 @odev.workspace.command()
 def create(
     ctx: Context,
-    db_name: Optional[str] = Argument(None, help=helps['db_name']),
-    modules_csv: Optional[str] = Argument(None, help=helps['modules_csv']),
-    venv_path: Optional[str] = Argument(None, help=helps['venv_path']),
-    repos_csv: Optional[str] = Argument(None, help=helps['repos_csv']),
+    db_name: str | None = Argument(None, help=helps['db_name']),
+    modules_csv: str | None = Argument(None, help=helps['modules_csv']),
+    venv_path: str | None = Argument(None, help=helps['venv_path']),
+    repos_csv: str | None = Argument(None, help=helps['repos_csv']),
 ):
     """
         Create a new workspace from a series of selections.
